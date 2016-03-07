@@ -4,24 +4,14 @@ from cis.data_io.products import NetCDF_Gridded
 
 class ECHAM_HAM(NetCDF_Gridded):
     """
-        HadGEM plugin for reading NetCDF files converted by CONVSH. It implements a callback to pass to iris when
+        Plugin for reading ECHAM-HAM NetCDF output files. It implements a callback to pass to iris when
         reading multiple files to allow correct merging
     """
 
-
-#    def __init__(self):
-#        from iris.fileformats.netcdf import _FACTORY_DEFNS, _FactoryDefn
-#	from iris.aux_factory import HybridPressureFactory
-#        super(ECHAM_HAM, self).__init__()
-#
-#	_FACTORY_DEFNS[HybridPressureFactory] = _FactoryDefn(
-#	        primary='delta',
-#        	std_name='hybrid_sigma_pressure',
-#	        formula_terms_format='ap: {delta} b: {sigma} '
-#	        'ps: {surface_air_pressure}')
-	
-
     def get_variable_names(self, filenames, data_type=None):
+	"""
+	This is exactly the same as the inherited version except I also exclude the mlev dimension
+	"""
         import iris
         import cf_units as unit
         variables = []
@@ -36,7 +26,6 @@ class ECHAM_HAM(NetCDF_Gridded):
                         not units.is_time_reference() and \
                         not units.is_vertical() and \
                         not units.is_convertible(unit.Unit('degrees')) and \
-			# I have to add this to get 3d fields in CIS info
 			dim.var_name != 'mlev':
                     is_time_lat_lon_pressure_altitude_or_has_only_1_point = False
                     break
@@ -49,8 +38,8 @@ class ECHAM_HAM(NetCDF_Gridded):
         return set(variables)
 
 
- #   def get_file_signature(self):
- #       return [r'.*\.nc']
+    def get_file_signature(self):
+        return [r'.*\.nc']
 
     @staticmethod
     def load_mutliple_files_callback(cube, field, filename):
@@ -92,11 +81,12 @@ class ECHAM_HAM(NetCDF_Gridded):
 	#    cube.units = '1'
         return cube
 
-#    def _add_available_aux_coords(self, cube, filenames):
-#	from iris.aux_factory import HybridPressureFactory
-#        cube.add_aux_factory(HybridPressureFactory(delta=cube.coord('hybrid A coefficient at layer midpoints'),
-#                                                   sigma=cube.coord('hybrid B coefficient at layer midpoints'),
-#                                                   surface_air_pressure=cube.coord('surface pressure')))
+    def _add_available_aux_coords(self, cube, filenames):
+	from iris.aux_factory import HybridPressureFactory
+	if cube.coords('atmosphere_hybrid_sigma_pressure_coordinate'):
+	        cube.add_aux_factory(HybridPressureFactory(delta=cube.coord('hybrid A coefficient at layer midpoints'),
+        	                                           sigma=cube.coord('hybrid B coefficient at layer midpoints'),
+                	                                   surface_air_pressure=cube.coord('surface pressure')))
 
 
     def get_file_type_error(self, filename):
