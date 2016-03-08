@@ -40,9 +40,10 @@ class GASSP(NCAR_NetCDF_RAF):
             m.alter_standard_name(standard_name)
             if standard_name == 'air_pressure':
                 if ',' in m.units:
-                    cfunit = Unit(m.units.split(',')[0])
-                else:
-                    Unit(m.units)
+                    m.units = m.units.split(',')[0]
+                if m.units == 'mb' or m.units == 'Mb':
+                    m.units = 'mbar'
+                cfunit = Unit(m.units)
                 logging.info("Parsed air pressure units '''{old}''' as {new} ".format(old=m.units, new=cfunit))
                 logging.info('Converting to hPa')
                 data = Unit(m.units).convert(d[:], 'hPa')
