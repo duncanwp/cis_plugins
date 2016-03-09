@@ -44,7 +44,7 @@ class GASSP(NCAR_NetCDF_RAF):
                 if m.units == 'mb' or m.units == 'Mb':
                     m.units = 'mbar'
                 cfunit = Unit(m.units)
-                logging.info("Parsed air pressure units '''{old}''' as {new} ".format(old=m.units, new=cfunit))
+                logging.info("Parsed air pressure units '{old}' as {new} ".format(old=m.units, new=cfunit))
                 logging.info('Converting to hPa')
                 data = Unit(m.units).convert(d[:], 'hPa')
                 m.units = 'hPa'
