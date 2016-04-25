@@ -6,6 +6,12 @@ class ECHAM_HAM(NetCDF_Gridded):
         Plugin for reading ECHAM-HAM NetCDF output files. 
     """
 
+    @staticmethod
+    def load_single_file_callback(cube, field, filename):
+        from iris.util import squeeze
+        # Sometimes it's useful to remove length one dimensions from cubes, squeeze does this for us...
+        return squeeze(cube)
+
     def get_variable_names(self, filenames, data_type=None):
         """
         This is exactly the same as the inherited version except I also exclude the mlev dimension

@@ -141,15 +141,27 @@ class HadGEM_UKCA(HadGEM_PP):
         STASH_TO_CF["m01s38i275"] = CFName("tendency_of_moles_of_particulate_organic_matter_insoluble_aitken_mode_dry_aerosol_due_to_wet_deposition_below_cloud", None, "mol s-1")
 
         # Section 38: UKCA CCN concentrations
-        STASH_TO_CF["m01s38i437"] = CFName(None, "condensation_nuclei_number_concentration", "1")
-        STASH_TO_CF["m01s38i438"] = CFName(None, "cloud_condensation_nuclei_number_concentration_accumulation_plus_coarse_modes", "1")
-        STASH_TO_CF["m01s38i439"] = CFName(None, "cloud_condensation_nuclei_number_concentration_accumulation_plus_coarse_plus_aitken_gt_25r_modes", "1")
-        STASH_TO_CF["m01s38i440"] = CFName(None, "cloud_condensation_nuclei_number_concentration_accumulation_plus_coarse_plus_aitken_gt_35r_modes", "1")
-        STASH_TO_CF["m01s38i441"] = CFName(None, "cloud_droplet_numer_number_concentration", "1")
+        STASH_TO_CF["m01s38i437"] = CFName(None, "condensation_nuclei_number_concentration", "cm-3")
+        STASH_TO_CF["m01s38i438"] = CFName(None, "cloud_condensation_nuclei_number_concentration_accumulation_plus_coarse_modes", "cm-3")
+        STASH_TO_CF["m01s38i439"] = CFName(None, "cloud_condensation_nuclei_number_concentration_accumulation_plus_coarse_plus_aitken_gt_25r_modes", "cm-3")
+        STASH_TO_CF["m01s38i440"] = CFName(None, "cloud_condensation_nuclei_number_concentration_accumulation_plus_coarse_plus_aitken_gt_35r_modes", "cm-3")
+        STASH_TO_CF["m01s38i441"] = CFName(None, "cloud_droplet_numer_number_concentration", "cm-3")
+
+        STASH_TO_CF["m01s38i484"] = CFName(None, "cloud_condensation_nuclei_number_concentration_at_fixed_supersaturation", "m-3")
+        # This looks 3D but the vertical dimension actually represents different levels of supersaturation.
+        # Model saturation levels, lowest model level will be lowest supersaturation:
+        saturation_levels = [0.02, 0.04, 0.06, 0.08,
+                             0.1,  0.16, 0.2,  0.23,
+                             0.3,  0.33, 0.38, 0.4,
+                             0.5,  0.6,  0.75, 0.8,
+                             0.85, 1.0, 1.2]
 
         # Section 38: UKCA Partial volume conctrations
         STASH_TO_CF["m01s38i446"] = CFName(None, "partial_volume_concentration_of_sulfate_soluble_aitken_mode", "1")
 
-        # Section 50: UKCA standard diagnostics
-        STASH_TO_CF["m01s50i061"] = CFName(None, "tropospheric_mass_of_air", "??")
-        STASH_TO_CF["m01s50i063"] = CFName(None, "mass_of_air", "??")
+        # Section 50: UKCA standard diagnostic. Probably Kg, but I've not double checked.
+        # These are mostly used in non-hydrostatic cases. An alternative is to use density of air, either directly or
+        # as calculated by pressure and temperature. I'd also need to check if these are dry or wet air...
+        STASH_TO_CF["m01s50i061"] = CFName(None, "tropospheric_mass_of_air", "kg")
+        STASH_TO_CF["m01s50i063"] = CFName(None, "mass_of_air", "kg")
+
