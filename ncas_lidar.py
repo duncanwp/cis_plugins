@@ -1,44 +1,52 @@
 import logging
-from cis.data_io import hdf as hdf
 from cis.data_io.Coord import Coord, CoordList
-from cis.data_io.hdf_vd import get_data, VDS
 from cis.data_io.products import AProduct
+from cis.data_io.netcdf import read, get_metadata, read_many_files_individually
 from cis.data_io.ungridded_data import Metadata, UngriddedCoordinates, UngriddedData
 import cis.utils as utils
+from cis.exceptions import InvalidVariableError
 
 
-class abstract_ncas(AProduct):
+class ncas_lidar(AProduct):
     def get_file_signature(self):
         '''
         To be implemented by subclcass
         :return:
         '''
-        return []
+        return [r'ncas-lidar.*nc']
 
-    def _create_coord_list(self, filenames):
-        from cis.data_io.netcdf import read_many_files_individually, get_metadata
-        from cis.data_io.Coord import Coord
-        from cis.exceptions import InvalidVariableError
+    priority = 20
 
-        variables = [("longitude", "x"), ("latitude", "y"), ("altitude", "z"), ("air_pressure", "p"), ('time', 't')]
-
-        logging.info("Listing coordinates: " + str(variables))
+    def _create_coord_list(self, filename):
+        import numpy as np
 
         coords = CoordList()
-        for variable in variables:
-            try:
-                var_data = read_many_files_individually(filenames, variable[0])[variable[0]]
-                coord = Coord(var_data, get_metadata(var_data[0]), axis=variable[1])
-                if variable[0] == 'time':
-                    coord.convert_to_std_time()
-                coords.append(coord)
-            except InvalidVariableError:
-                pass
 
-        # I either need to convert each coord to the right shape here - or do it more generally in the data object creation
-        #  I think I just need to do this manually for now, in the long run I don't want to have to be expanding these
-        #  arrays anyway.
+        time_data = read(filename, 'time')['time']
+        len_x = time_data.shape[0]
 
+        try:
+            alt_data = read(filename, 'altitude')['altitude']
+        except InvalidVariableError:
+            alt_data = read(filename, 'range')['range']
+
+        len_y = alt_data.shape[0]
+
+        time_arr = utils.expand_1d_to_2d_array(time_data[:], len_y, axis=1)
+        t_coord = Coord(time_arr, get_metadata(time_data), axis='x')
+        t_coord.convert_to_std_time()
+        coords.append(t_coord)
+
+        alt_arr = utils.expand_1d_to_2d_array(alt_data[:], len_x, axis=0)
+        coords.append(Coord(alt_arr, get_metadata(alt_data), axis='y'))
+
+        lat_data = read(filename, 'latitude')['latitude']
+        lat_arr = np.ones(alt_arr.shape) * lat_data[:]
+        coords.append(Coord(lat_arr, get_metadata(lat_data)))
+
+        lon_data = read(filename, 'longitude')['longitude']
+        lon_arr = np.ones(alt_arr.shape) * lon_data[:]
+        coords.append(Coord(lon_arr, get_metadata(lon_data)))
 
         #
         #
@@ -126,37 +134,16 @@ class abstract_ncas(AProduct):
         return UngriddedCoordinates(self._create_coord_list(filenames))
 
     def create_data_object(self, filenames, variable):
-        '''
-        To be implemented by subclass
-        :param filenames:
-        :param variable:
-        :return:
-        '''
-        return None
-
-class ncas_lidar(abstract_ncas):
-    def get_file_signature(self):
-        return [r'ncas-lidar.*nc']
-
-    def create_coords(self, filenames, variable=None):
-        return UngriddedCoordinates(super(ncas_lidar, self)._create_coord_list(filenames, index_offset=1))
-
-    def create_data_object(self, filenames, variable):
         logging.debug("Creating data object for variable " + variable)
 
         # reading coordinates
         # the variable here is needed to work out whether to apply interpolation to the lat/lon data or not
-        coords = self._create_coord_list(filenames)
+        coords = self._create_coord_list(filenames[0])
 
-        # reading of variables
-        sdata, vdata = hdf.read(filenames, variable)
+        usr_var_data = read_many_files_individually(filenames, variable)[variable]
 
-        # retrieve data + its metadata
-        var = sdata[variable]
-        metadata = hdf.read_metadata(var, "SD")
-
-        return UngriddedData(var, metadata, coords, self.get_calipso_data)
+        return UngriddedData(usr_var_data, get_metadata(usr_var_data[0]), coords)
 
     def get_file_format(self, filename):
-        return "HDF4/CaliopL2"
+        return "NetCDF/NCASLidar"
 

@@ -66,7 +66,7 @@ class ECHAM_HAM(NetCDF_Gridded):
             errors = ['No source attribute found in {}'.format(filename)]
         else:
             if source != 'ECHAM6.1':
-                    errors = ['Source ({}) does not match ECHAM6.1 in {}'.format([source, filename])]
+                    errors = ['Source ({}) does not match ECHAM6.1 in {}'.format(source, filename)]
         return errors
 
 
