@@ -25,10 +25,10 @@ class ECHAM_HAM_surface_only(ECHAM_HAM):
 
         variable_constraint = variable
         if isinstance(variable, basestring):
-            variable_constraint = DisplayConstraint(cube_func=(lambda c: c.var_name == variable or
-                                                               c.standard_name == variable or
-                                                               c.long_name == variable), display=variable,
-                                                    mlev=31)
+            variable_constraint = [DisplayConstraint(cube_func=(lambda c: c.var_name == variable or
+                                                                c.standard_name == variable or
+                                                                c.long_name == variable), display=variable),
+                                   iris.Constraint(mlev=31)]
         if len(filenames) == 1:
             callback_function = self.load_single_file_callback
         else:
