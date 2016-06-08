@@ -7,6 +7,48 @@ class GASSP_variable_name_selector(NCAR_NetCDF_RAF_variable_name_selector):
     # Standard static air pressure variable name
     PRESSURE_VAR_NAME = 'AIR_PRESSURE'
 
+    @staticmethod
+    def _parse_station_lat_lon(lat_lon_string):
+        """
+        Parse a station's latitude or longitude string. Will try and read it directly as a float, otherwise will try and
+         read the first white-space separated part of the string (e.g. '80 degrees north' -> float(80)).
+        :param lat_lon_string:
+        :return:
+        """
+        from cis.exceptions import InvalidVariableError
+        try:
+            return float(lat_lon_string)
+        except ValueError:
+            try:
+                return float(lat_lon_string.split()[0])
+            except ValueError:
+                raise InvalidVariableError("Couldn't parse station attribute '{}'".format(lat_lon_string))
+
+    def _stationary_setup(self):
+        """
+        Set up object when latitude and longitude are fixed
+        """
+        from cis.exceptions import InvalidVariableError
+        if self.STATION_LATITUDE_NAME.lower() not in self._attributes[0]:
+            raise InvalidVariableError("No attributes indicating latitude, expecting '{}'"
+                                       .format(self.STATION_LATITUDE_NAME))
+        # We need a bunch of different latitudes for different files
+        self.station_latitude = [self._parse_station_lat_lon(attr[self.STATION_LATITUDE_NAME.lower()])
+                                 for attr in self._attributes]
+
+        if self.STATION_LONGITUDE_NAME.lower() not in self._attributes[0]:
+            raise InvalidVariableError("No attributes indicating longitude, expecting '{}'"
+                                       .format(self.STATION_LONGITUDE_NAME))
+        self.station_longitude = [self._parse_station_lat_lon(attr[self.STATION_LONGITUDE_NAME.lower()])
+                                  for attr in self._attributes]
+        self.station = True
+
+        if self.STATION_ALTITUDE_NAME.lower() in self._attributes[0]:
+            self.altitude = [self._parse_station_altitude(attr[self.STATION_ALTITUDE_NAME.lower()])
+                             for attr in self._attributes]
+        else:
+            self.altitude = [self.DEFAULT_ALTITUDE for attr in self._attributes]
+
 
 class GASSP(NCAR_NetCDF_RAF):
 
@@ -54,43 +96,3 @@ class GASSP(NCAR_NetCDF_RAF):
 
         return Coord.from_many_coordinates(coordinate_data_objects)
 
-    def _parse_station_lat_lon(self, lat_lon_string):
-        """
-        Parse a station's latitude or longitude string. Will try and read it directly as a float, otherwise will try and
-         read the first white-space separated part of the string (e.g. '80 degrees north' -> float(80)).
-        :param lat_lon_string:
-        :return:
-        """
-        from cis.exceptions import InvalidVariableError
-        try:
-            return float(lat_lon_string)
-        except ValueError:
-            try:
-                return float(lat_lon_string.split()[0])
-            except ValueError:
-                raise InvalidVariableError("Couldn't parse station attribute '{}'".format(lat_lon_string))
-
-    def _stationary_setup(self):
-        """
-        Set up object when latitude and longitude are fixed
-        """
-        from cis.exceptions import InvalidVariableError
-        if self.STATION_LATITUDE_NAME.lower() not in self._attributes[0]:
-            raise InvalidVariableError("No attributes indicating latitude, expecting '{}'"
-                                       .format(self.STATION_LATITUDE_NAME))
-        # We need a bunch of different latitudes for different files
-        self.station_latitude = [self._parse_station_lat_lon(attr[self.STATION_LATITUDE_NAME.lower()])
-                                 for attr in self._attributes]
-
-        if self.STATION_LONGITUDE_NAME.lower() not in self._attributes[0]:
-            raise InvalidVariableError("No attributes indicating longitude, expecting '{}'"
-                                       .format(self.STATION_LONGITUDE_NAME))
-        self.station_longitude = [self._parse_station_lat_lon(attr[self.STATION_LONGITUDE_NAME.lower()])
-                                  for attr in self._attributes]
-        self.station = True
-
-        if self.STATION_ALTITUDE_NAME.lower() in self._attributes[0]:
-            self.altitude = [self._parse_station_altitude(attr[self.STATION_ALTITUDE_NAME.lower()])
-                             for attr in self._attributes]
-        else:
-            self.altitude = [self.DEFAULT_ALTITUDE for attr in self._attributes]
