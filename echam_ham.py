@@ -12,6 +12,13 @@ class ECHAM_HAM(NetCDF_Gridded):
         # Sometimes it's useful to remove length one dimensions from cubes, squeeze does this for us...
         return squeeze(cube)
 
+    @staticmethod
+    def load_multiple_files_callback(cube, field, filename):
+        # We need to remove these global attributes when reading multiple files so that the cubes can be properly merged
+        cube.attributes.pop('host_name')
+        cube.attributes.pop('date_time')
+        return cube
+
     def get_variable_names(self, filenames, data_type=None):
         """
         This is exactly the same as the inherited version except I also exclude the mlev dimension
