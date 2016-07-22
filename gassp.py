@@ -79,7 +79,7 @@ class GASSP(NCAR_NetCDF_RAF):
         coordinate_data_objects = []
         for d in data_variables[data_variable_name]:
             m = get_metadata(d)
-            m.alter_standard_name(standard_name)
+            m.standard_name = standard_name
             if standard_name == 'air_pressure':
                 if ',' in m.units:
                     m.units = m.units.split(',')[0]
