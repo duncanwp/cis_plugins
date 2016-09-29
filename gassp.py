@@ -78,6 +78,7 @@ class GASSP(NCAR_NetCDF_RAF):
         for d in data_variables[data_variable_name]:
             data = get_data(d)
             m = get_metadata(d)
+            m._name = m._name.lower()
             m.standard_name = standard_name
             if standard_name == 'air_pressure':
                 if ',' in m.units:
