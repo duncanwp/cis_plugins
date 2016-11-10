@@ -18,6 +18,7 @@ class OMI(AProduct):
         from biggus import OrthoArrayAdapter
         from iris.cube import Cube, CubeList
         from iris.coords import DimCoord
+        from iris.fileformats.netcdf import NetCDFDataProxy
         from datetime import datetime
         from os.path import basename
         from cis.time_util import cis_standard_time_unit
@@ -32,8 +33,18 @@ class OMI(AProduct):
             lat = ds.variables['LATITUDE']
             lon = ds.variables['LONGITUDE']
 
-            # Create a bigus adaptor over the data
-            a = OrthoArrayAdapter(v)
+            # Create a biggus adaptor over the data
+            scale_factor = getattr(v, 'scale_factor', None)
+            add_offset = getattr(v, 'add_offset', None)
+            if scale_factor is None and add_offset is None:
+                v_dtype = v.datatype
+            elif scale_factor is not None:
+                v_dtype = scale_factor.dtype
+            else:
+                v_dtype = add_offset.dtype
+            proxy = NetCDFDataProxy(v.shape, v_dtype, f, variable,
+                                    v._FillValue)
+            a = OrthoArrayAdapter(proxy)
 
             lat_coord = DimCoord(lat, standard_name='latitude', units='degrees', long_name=lat.VAR_DESCRIPTION)
             lon_coord = DimCoord(lon, standard_name='longitude', units='degrees', long_name=lon.VAR_DESCRIPTION)
