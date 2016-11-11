@@ -22,6 +22,7 @@ class OMI(AProduct):
         from datetime import datetime
         from os.path import basename
         from cis.time_util import cis_standard_time_unit
+        from cis.data_io.gridded_data import make_from_cube
 
         cubes = CubeList()
 
@@ -66,6 +67,8 @@ class OMI(AProduct):
 
             cubes.append(c)
 
+        # We have a scalar time coord and no conflicting metadata so this should just create one cube...
         merged = cubes.merge_cube()
 
-        return merged
+        # Return as a CIS GriddedData object
+        return make_from_cube(merged)
