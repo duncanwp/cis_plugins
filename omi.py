@@ -26,6 +26,7 @@ class OMI(AProduct):
         cubes = CubeList()
 
         for f in filenames:
+            # Open the file
             ds = Dataset(f)
             # E.g. 'NO2.COLUMN.VERTICAL.TROPOSPHERIC.CS30_BACKSCATTER.SOLAR'
             v = ds.variables[variable]
@@ -46,18 +47,23 @@ class OMI(AProduct):
                                     v._FillValue)
             a = OrthoArrayAdapter(proxy)
 
-            lat_coord = DimCoord(lat, standard_name='latitude', units='degrees', long_name=lat.VAR_DESCRIPTION)
-            lon_coord = DimCoord(lon, standard_name='longitude', units='degrees', long_name=lon.VAR_DESCRIPTION)
+            # Just read the lat and lon in directly
+            lat_coord = DimCoord(lat[:], standard_name='latitude', units='degrees', long_name=lat.VAR_DESCRIPTION)
+            lon_coord = DimCoord(lon[:], standard_name='longitude', units='degrees', long_name=lon.VAR_DESCRIPTION)
 
             # Pull the date out of the filename
             fname = basename(f)
             dt = datetime.strptime(fname[:10], "%Y_%m_%d")
             t_coord = DimCoord(cis_standard_time_unit.date2num(dt), standard_name='time', units=cis_standard_time_unit)
 
-            c = Cube(a, long_name=v.VAR_DESCRIPTION, units=v.VAR_UNITS,
+            c = Cube(a, long_name=getattr(v, "VAR_DESCRIPTION", None), units=getattr(v, "VAR_UNITS", None),
                      dim_coords_and_dims=[(lat_coord, 0), (lon_coord, 1)])
 
             c.add_aux_coord(t_coord)
+
+            # Close the file
+            ds.close()
+
             cubes.append(c)
 
         merged = cubes.merge_cube()
