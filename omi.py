@@ -23,6 +23,7 @@ class OMI(AProduct):
         from os.path import basename
         from cis.time_util import cis_standard_time_unit
         from cis.data_io.gridded_data import make_from_cube
+        import numpy as np
 
         cubes = CubeList()
 
@@ -44,9 +45,12 @@ class OMI(AProduct):
                 v_dtype = scale_factor.dtype
             else:
                 v_dtype = add_offset.dtype
-            proxy = NetCDFDataProxy(v.shape, v_dtype, f, variable,
-                                    v._FillValue)
-            a = OrthoArrayAdapter(proxy)
+            # proxy = NetCDFDataProxy(v.shape, v_dtype, f, variable, float(v.VAR_FILL_VALUE))
+            # a = OrthoArrayAdapter(proxy)
+            # Mask out all invalid values (NaN, Inf, etc)
+            a = np.ma.masked_invalid(v[:])
+            # Set everything negative to NaN
+            a = np.ma.masked_less(a, 0.0)
 
             # Just read the lat and lon in directly
             lat_coord = DimCoord(lat[:], standard_name='latitude', units='degrees', long_name=lat.VAR_DESCRIPTION)
