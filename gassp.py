@@ -85,14 +85,20 @@ class GASSP(NCAR_NetCDF_RAF):
                     if ',' in m.units:
                         # Try splitting any commas out
                         m.units = m.units.split(',')[0]
+                    if ' ' in m.units:
+                        # Try splitting any spaces out
+                        m.units = m.units.split()[0]
                 if str(m.units) == 'mb' or str(m.units) == 'Mb':
                     # Try converting to standard nomencleture
                     m.units = 'mbar'
+                if str(m.units) == 'hpa':
+                    m.units = 'hPa'
 
                 logging.info("Parsed air pressure units {old}".format(old=m.units))
                 logging.info('Converting to hPa')
-                data = m.units.convert(data, 'hPa')
-                m.units = 'hPa'
+                if not isinstance(m.units, str):
+                    data = m.units.convert(data, 'hPa')
+                    m.units = 'hPa'
 
             coordinate_data_objects.append(Coord(data, m, coord_axis))
 
