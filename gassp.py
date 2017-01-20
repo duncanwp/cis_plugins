@@ -60,7 +60,7 @@ class GASSP(NCAR_NetCDF_RAF):
         """
         super(GASSP, self).__init__(variable_selector_class=variable_selector_class)
 
-    def _create_coord(self, coord_axis, data_variable_name, filenames, standard_name):
+    def _create_coord(self, coord_axis, data_variable_name, data_variables, standard_name):
         """
         Create a coordinate for the co-ordinate list
         :param coord_axis: axis of the coordinate in the coords
@@ -69,30 +69,37 @@ class GASSP(NCAR_NetCDF_RAF):
         :param standard_name: the standard name it should have
         :return: a coords object
         """
-        from cis.data_io.netcdf import get_metadata, read
+        from cis.data_io.netcdf import get_metadata, get_data
         from cis.data_io.Coord import Coord
         from cf_units import Unit
         import logging
 
         coordinate_data_objects = []
-        for f in filenames:
-            m = get_metadata(data_variable_name, f)
+        for d in data_variables[data_variable_name]:
+            data = get_data(d)
+            m = get_metadata(d)
+            m._name = m._name.lower()
             m.standard_name = standard_name
-            data = read(f, data_variable_name)[data_variable_name]
             if standard_name == 'air_pressure':
-                if ',' in m.units:
-                    m.units = m.units.split(',')[0]
-                if m.units == 'mb' or m.units == 'Mb':
+                if not isinstance(m.units, Unit):
+                    if ',' in m.units:
+                        # Try splitting any commas out
+                        m.units = m.units.split(',')[0]
+                    if ' ' in m.units:
+                        # Try splitting any spaces out
+                        m.units = m.units.split()[0]
+                if str(m.units) == 'mb' or str(m.units) == 'Mb':
+                    # Try converting to standard nomencleture
                     m.units = 'mbar'
-                cfunit = Unit(m.units)
-                logging.info("Parsed air pressure units '{old}' as {new} ".format(old=m.units, new=cfunit))
+                if str(m.units) == 'hpa':
+                    m.units = 'hPa'
+
+                logging.info("Parsed air pressure units {old}".format(old=m.units))
                 logging.info('Converting to hPa')
-                # Only do the conversion if we have to, there might be a memory leak in UDUNITS somewhere...
-                if m.units not in ['mbar', 'hPa']:
-                    data = Unit(m.units).convert(data, 'hPa')
-                m.units = 'hPa'
+                if not isinstance(m.units, str):
+                    data = m.units.convert(data, 'hPa')
+                    m.units = 'hPa'
 
             coordinate_data_objects.append(Coord(data, m, coord_axis))
 
         return Coord.from_many_coordinates(coordinate_data_objects)
-

@@ -3,7 +3,11 @@ from cis.data_io.products import NetCDF_Gridded
 
 class ECHAM_HAM_Pascals(NetCDF_Gridded):
     """
+<<<<<<< HEAD
         Plugin for reading ECHAM-HAM NetCDF output files. 
+=======
+        Plugin for reading ECHAM-HAM NetCDF output files.
+>>>>>>> 02369a85cc6c7b122be6383ce44a9e5420b6e8c3
     """
 
     @staticmethod
