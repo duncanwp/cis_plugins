@@ -42,7 +42,7 @@ class ECHAM_HAM_63(ECHAM_HAM_Pascals):
         from iris.exceptions import CoordinateNotFoundError
 
         # Only do this for fields with a vertical component - this check is a bit hacky though (doesn't consider 3D with no time...)
-        if cube.ndims == 4:
+        if cube.ndim == 4:
             hybrid_a = iris.load_cube(filenames, 'hybrid A coefficient at layer midpoints')
             hybrid_b = iris.load_cube(filenames, 'hybrid B coefficient at layer midpoints')
 
