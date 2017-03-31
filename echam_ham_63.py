@@ -43,8 +43,9 @@ class ECHAM_HAM_63(ECHAM_HAM_Pascals):
 
         # Only do this for fields with a vertical component - this check is a bit hacky though (doesn't consider 3D with no time...)
         if cube.ndim == 4:
-            hybrid_a = iris.load_cube(filenames, 'hybrid A coefficient at layer midpoints')
-            hybrid_b = iris.load_cube(filenames, 'hybrid B coefficient at layer midpoints')
+            # Only read the first file for these coefficients as they are time-independant and iris won't merge them
+            hybrid_a = iris.load_cube(filenames[0], 'hybrid A coefficient at layer midpoints')
+            hybrid_b = iris.load_cube(filenames[0], 'hybrid B coefficient at layer midpoints')
 
             hybrid_a_coord = AuxCoord(points=hybrid_a.data, long_name='hybrid A coefficient at layer midpoints', units='Pa')
             hybrid_b_coord = AuxCoord(points=hybrid_b.data, long_name='hybrid B coefficient at layer midpoints', units='1')
