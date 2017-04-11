@@ -41,30 +41,33 @@ class ECHAM_HAM_63(ECHAM_HAM_Pascals):
         from iris.coords import AuxCoord
         from iris.exceptions import CoordinateNotFoundError
 
-        hybrid_a = iris.load_cube(filenames, 'hybrid A coefficient at layer midpoints')
-        hybrid_b = iris.load_cube(filenames, 'hybrid B coefficient at layer midpoints')
+        # Only do this for fields with a vertical component - this check is a bit hacky though (doesn't consider 3D with no time...)
+        if cube.ndim == 4:
+            # Only read the first file for these coefficients as they are time-independant and iris won't merge them
+            hybrid_a = iris.load_cube(filenames[0], 'hybrid A coefficient at layer midpoints')
+            hybrid_b = iris.load_cube(filenames[0], 'hybrid B coefficient at layer midpoints')
 
-        hybrid_a_coord = AuxCoord(points=hybrid_a.data, long_name='hybrid A coefficient at layer midpoints', units='Pa')
-        hybrid_b_coord = AuxCoord(points=hybrid_b.data, long_name='hybrid B coefficient at layer midpoints', units='1')
+            hybrid_a_coord = AuxCoord(points=hybrid_a.data, long_name='hybrid A coefficient at layer midpoints', units='Pa')
+            hybrid_b_coord = AuxCoord(points=hybrid_b.data, long_name='hybrid B coefficient at layer midpoints', units='1')
 
-        try:
-            surface_pressure = cube.coord('surface pressure')
-        except CoordinateNotFoundError as e:
-            # If there isn't a surface pressure coordinate we can try and pull out the lowest pressure level
-            surface_pressure_cube = iris.load_cube(filenames, 'atmospheric pressure at interfaces')[:,-1,:,:]
-            surface_pressure = AuxCoord(points=surface_pressure_cube.data, long_name='surface pressure', units='Pa')
-            cube.add_aux_coord(surface_pressure, (0, 2, 3))
+            try:
+                surface_pressure = cube.coord('surface pressure')
+            except CoordinateNotFoundError as e:
+                # If there isn't a surface pressure coordinate we can try and pull out the lowest pressure level
+                surface_pressure_cube = iris.load_cube(filenames, 'atmospheric pressure at interfaces')[:,-1,:,:]
+                surface_pressure = AuxCoord(points=surface_pressure_cube.data, long_name='surface pressure', units='Pa')
+                cube.add_aux_coord(surface_pressure, (0, 2, 3))
 
-        # First convert the hybrid coefficients to hPa, so that air pressure will be in hPa
-        hybrid_a_coord.convert_units('hPa')
-        surface_pressure.convert_units('hPa')
+            # First convert the hybrid coefficients to hPa, so that air pressure will be in hPa
+            hybrid_a_coord.convert_units('hPa')
+            surface_pressure.convert_units('hPa')
 
-        cube.add_aux_coord(hybrid_a_coord, (1,))
-        cube.add_aux_coord(hybrid_b_coord, (1,))
+            cube.add_aux_coord(hybrid_a_coord, (1,))
+            cube.add_aux_coord(hybrid_b_coord, (1,))
 
-        if len(cube.coords(long_name='hybrid level at layer midpoints')) > 0:
-            cube.add_aux_factory(HybridPressureFactory(delta=hybrid_a_coord, sigma=hybrid_b_coord,
-                                                       surface_air_pressure=surface_pressure))
+            if len(cube.coords(long_name='hybrid level at layer midpoints')) > 0:
+                cube.add_aux_factory(HybridPressureFactory(delta=hybrid_a_coord, sigma=hybrid_b_coord,
+                                                           surface_air_pressure=surface_pressure))
 
     def get_file_type_error(self, filename):
         """
