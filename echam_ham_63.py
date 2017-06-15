@@ -3,8 +3,7 @@ import cis.data_io.gridded_data as gd
 import logging
 
 
-def load_from_cached_cubes(filenames, constraints=None, callback=None):
-    from iris.exceptions import MergeError, ConcatenateError
+def _get_cubes(filenames, constraints=None, callback=None):
     import iris
 
     # Removes warnings and prepares for future Iris change
@@ -16,7 +15,16 @@ def load_from_cached_cubes(filenames, constraints=None, callback=None):
     else:
         all_cubes = iris.load(filenames, callback=callback)
         gd.CACHED_CUBES[filenames_key] = all_cubes
-    cubes = all_cubes.extract(constraints=constraints)
+    if constraints is not None:
+        cubes = all_cubes.extract(constraints=constraints)
+    else:
+        cubes = all_cubes
+    return cubes
+
+
+def load_from_cached_cubes(filenames, constraints=None, callback=None):
+    from iris.exceptions import MergeError, ConcatenateError
+    cubes = _get_cubes(filenames, constraints, callback)
 
     try:
         iris_cube = cubes.merge_cube()
@@ -47,7 +55,8 @@ class ECHAM_HAM_63(ECHAM_HAM_Pascals):
         import iris
         import cf_units as unit
         variables = []
-        cubes = iris.load(filenames)
+
+        cubes = _get_cubes(filenames)
 
         for cube in cubes:
             is_time_lat_lon_pressure_altitude_or_has_only_1_point = True
@@ -78,8 +87,8 @@ class ECHAM_HAM_63(ECHAM_HAM_Pascals):
         # Only do this for fields with a vertical component - this check is a bit hacky though (doesn't consider 3D with no time...)
         if cube.ndim == 4:
             # Only read the first file for these coefficients as they are time-independant and iris won't merge them
-            hybrid_a = iris.load_cube(filenames[0], 'hybrid A coefficient at layer midpoints')
-            hybrid_b = iris.load_cube(filenames[0], 'hybrid B coefficient at layer midpoints')
+            hybrid_a = _get_cubes(filenames, 'hybrid A coefficient at layer midpoints')
+            hybrid_b = _get_cubes(filenames, 'hybrid B coefficient at layer midpoints')
 
             hybrid_a_coord = AuxCoord(points=hybrid_a.data, long_name='hybrid A coefficient at layer midpoints', units='Pa')
             hybrid_b_coord = AuxCoord(points=hybrid_b.data, long_name='hybrid B coefficient at layer midpoints', units='1')
@@ -88,7 +97,8 @@ class ECHAM_HAM_63(ECHAM_HAM_Pascals):
                 surface_pressure = cube.coord('surface pressure')
             except CoordinateNotFoundError as e:
                 # If there isn't a surface pressure coordinate we can try and pull out the lowest pressure level
-                surface_pressure_cubes = iris.load(filenames, 'atmospheric pressure at interfaces', callback=self.load_multiple_files_callback)
+                surface_pressure_cubes = _get_cubes(filenames, 'atmospheric pressure at interfaces',
+                                                    callback=self.load_multiple_files_callback)
                 surface_pressure_cube = surface_pressure_cubes.concatenate_cube()[:,-1,:,:]
                 surface_pressure = AuxCoord(points=surface_pressure_cube.data, long_name='surface pressure', units='Pa')
                 cube.add_aux_coord(surface_pressure, (0, 2, 3))

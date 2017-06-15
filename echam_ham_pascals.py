@@ -3,8 +3,7 @@ import cis.data_io.gridded_data as gd
 import logging
 
 
-def load_from_cached_cubes(filenames, constraints=None, callback=None):
-    from iris.exceptions import MergeError, ConcatenateError
+def _get_cubes(filenames, constraints=None, callback=None):
     import iris
 
     # Removes warnings and prepares for future Iris change
@@ -16,7 +15,16 @@ def load_from_cached_cubes(filenames, constraints=None, callback=None):
     else:
         all_cubes = iris.load(filenames, callback=callback)
         gd.CACHED_CUBES[filenames_key] = all_cubes
-    cubes = all_cubes.extract(constraints=constraints)
+    if constraints is not None:
+        cubes = all_cubes.extract(constraints=constraints)
+    else:
+        cubes = all_cubes
+    return cubes
+
+
+def load_from_cached_cubes(filenames, constraints=None, callback=None):
+    from iris.exceptions import MergeError, ConcatenateError
+    cubes = _get_cubes(filenames, constraints, callback)
 
     try:
         iris_cube = cubes.merge_cube()
@@ -31,17 +39,10 @@ def load_from_cached_cubes(filenames, constraints=None, callback=None):
         raise ValueError("No cubes found")
     return gd.make_from_cube(iris_cube)
 
-gd.CACHED_CUBES = {}
-gd.load_cube = load_from_cached_cubes
-
 
 class ECHAM_HAM_Pascals(NetCDF_Gridded):
     """
-<<<<<<< HEAD
-        Plugin for reading ECHAM-HAM NetCDF output files. 
-=======
         Plugin for reading ECHAM-HAM NetCDF output files.
->>>>>>> 02369a85cc6c7b122be6383ce44a9e5420b6e8c3
     """
 
     @staticmethod
@@ -64,7 +65,8 @@ class ECHAM_HAM_Pascals(NetCDF_Gridded):
         import iris
         import cf_units as unit
         variables = []
-        cubes = iris.load(filenames)
+
+        cubes = _get_cubes(filenames)
 
         for cube in cubes:
             is_time_lat_lon_pressure_altitude_or_has_only_1_point = True
