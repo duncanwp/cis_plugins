@@ -1,4 +1,38 @@
 from echam_ham_pascals import ECHAM_HAM_Pascals
+import cis.data_io.gridded_data as gd
+import logging
+
+
+def load_from_cached_cubes(filenames, constraints=None, callback=None):
+    from iris.exceptions import MergeError, ConcatenateError
+    import iris
+
+    # Removes warnings and prepares for future Iris change
+    iris.FUTURE.netcdf_promote = True
+
+    filenames_key = tuple(filenames)
+    if filenames_key in gd.CACHED_CUBES:
+        all_cubes = gd.CACHED_CUBES[filenames_key]
+    else:
+        all_cubes = iris.load(filenames, callback=callback)
+        gd.CACHED_CUBES[filenames_key] = all_cubes
+    cubes = all_cubes.extract(constraints=constraints)
+
+    try:
+        iris_cube = cubes.merge_cube()
+    except MergeError as e:
+        logging.info("Unable to merge cubes on load: \n {}\nAttempting to concatenate instead.".format(e))
+        try:
+            iris_cube = cubes.concatenate_cube()
+        except ConcatenateError as e:
+            logging.error("Unable to concatenate cubes on load: \n {}".format(e))
+            raise ValueError("Unable to create a single cube from arguments given: {}".format(constraints))
+    except ValueError as e:
+        raise ValueError("No cubes found")
+    return gd.make_from_cube(iris_cube)
+
+gd.CACHED_CUBES = {}
+gd.load_cube = load_from_cached_cubes
 
 
 class ECHAM_HAM_63(ECHAM_HAM_Pascals):
