@@ -12,9 +12,11 @@ def _get_cubes(filenames, constraints=None, callback=None):
     filenames_key = tuple(filenames)
     if filenames_key in gd.CACHED_CUBES:
         all_cubes = gd.CACHED_CUBES[filenames_key]
+        # print("Reading cached files: {}".format(filenames_key))
     else:
-        all_cubes = iris.load(filenames, callback=callback)
+        all_cubes = iris.load_raw(filenames, callback=callback)
         gd.CACHED_CUBES[filenames_key] = all_cubes
+        # print("Caching files: {}".format(filenames_key))
     if constraints is not None:
         cubes = all_cubes.extract(constraints=constraints)
     else:
@@ -66,7 +68,7 @@ class ECHAM_HAM_Pascals(NetCDF_Gridded):
         import cf_units as unit
         variables = []
 
-        cubes = _get_cubes(filenames)
+        cubes = _get_cubes(filenames, callback=self.load_multiple_files_callback)
 
         for cube in cubes:
             is_time_lat_lon_pressure_altitude_or_has_only_1_point = True
