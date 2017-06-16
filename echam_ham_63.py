@@ -12,9 +12,11 @@ def _get_cubes(filenames, constraints=None, callback=None):
     filenames_key = tuple(filenames)
     if filenames_key in gd.CACHED_CUBES:
         all_cubes = gd.CACHED_CUBES[filenames_key]
+        # print("Reading cached files: {}".format(filenames_key))
     else:
-        all_cubes = iris.load(filenames, callback=callback)
+        all_cubes = iris.load_raw(filenames, callback=callback)
         gd.CACHED_CUBES[filenames_key] = all_cubes
+        # print("Caching files: {}".format(filenames_key))
     if constraints is not None:
         cubes = all_cubes.extract(constraints=constraints)
     else:
@@ -56,7 +58,7 @@ class ECHAM_HAM_63(ECHAM_HAM_Pascals):
         import cf_units as unit
         variables = []
 
-        cubes = _get_cubes(filenames)
+        cubes = _get_cubes(filenames, callback=self.load_multiple_files_callback)
 
         for cube in cubes:
             is_time_lat_lon_pressure_altitude_or_has_only_1_point = True
@@ -90,8 +92,8 @@ class ECHAM_HAM_63(ECHAM_HAM_Pascals):
             hybrid_a = _get_cubes(filenames, 'hybrid A coefficient at layer midpoints')
             hybrid_b = _get_cubes(filenames, 'hybrid B coefficient at layer midpoints')
 
-            hybrid_a_coord = AuxCoord(points=hybrid_a.data, long_name='hybrid A coefficient at layer midpoints', units='Pa')
-            hybrid_b_coord = AuxCoord(points=hybrid_b.data, long_name='hybrid B coefficient at layer midpoints', units='1')
+            hybrid_a_coord = AuxCoord(points=hybrid_a[0].data, long_name='hybrid A coefficient at layer midpoints', units='Pa')
+            hybrid_b_coord = AuxCoord(points=hybrid_b[0].data, long_name='hybrid B coefficient at layer midpoints', units='1')
 
             try:
                 surface_pressure = cube.coord('surface pressure')
