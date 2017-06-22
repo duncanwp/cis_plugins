@@ -1,5 +1,54 @@
 __author__ = 'watson-parris'
-from cis.data_io.products.HadGEM import HadGEM_PP
+from cis.data_io.products.HadGEM import HadGEM_PP, HadGEM_CONVSH
+from cf_units import Unit
+
+
+class HadGEM_CONVSH_UKCA(HadGEM_CONVSH):
+    @staticmethod
+    def load_single_file_callback(cube, field, filename):
+        from iris.util import squeeze
+        # We need to remove the history field when reading multiple files so that the cubes can be properly merged
+        cube.attributes.pop('history')
+
+        # Fix the altitude coordinate
+        alt_coord = cube.coords(name_or_coord='hybrid_ht_1')
+        if alt_coord:
+            alt_coord[0].rename('altitude')
+            alt_coord[0].attributes={}
+            alt_coord[0].units = Unit('m')
+
+        # Remove the scalar time coord
+        if len(cube.coord('t').points) == 1:
+            cube.remove_coord(cube.coord(name_or_coord='t'))
+        else:
+            cube.coord(name_or_coord='t').rename('time')
+
+        # We also need to remove the length one time dimension so that the cube can be merged correctly (iris preserves
+        #  the value as a scalar which then gets converted back into a full coordinate again on merge).
+        return squeeze(cube)
+
+    @staticmethod
+    def load_multiple_files_callback(cube, field, filename):
+        from iris.util import squeeze
+        # We need to remove the history field when reading multiple files so that the cubes can be properly merged
+        cube.attributes.pop('history')
+
+        # Fix the altitude coordinate
+        alt_coord = cube.coords(name_or_coord='hybrid_ht_1')
+        if alt_coord:
+            alt_coord[0].rename('altitude')
+            alt_coord[0].attributes={}
+            alt_coord[0].units = Unit('m')
+
+        # Remove the scalar time coord
+        if len(cube.coord('t').points) == 1:
+            cube.remove_coord(cube.coord(name_or_coord='t'))
+        else:
+            cube.coord(name_or_coord='t').rename('time')
+
+        # We also need to remove the length one time dimension so that the cube can be merged correctly (iris preserves
+        #  the value as a scalar which then gets converted back into a full coordinate again on merge).
+        return squeeze(cube)
 
 
 class HadGEM_UKCA(HadGEM_PP):
