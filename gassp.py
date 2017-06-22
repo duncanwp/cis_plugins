@@ -62,21 +62,40 @@ class GASSP(NCAR_NetCDF_RAF):
 
     def create_coords(self, filenames, variable=None):
         """
-        Override the default read-in to also read in CCN quality flag data and apply the appropriate mask
+        Override the default read-in to also read in CCN quality flag data and apply the appropriate mask. We have
+        to do this before creating the UngriddedData object so that the missing coords don't get fixed first
         """
-        from cis.data_io.netcdf import read_many_files_individually
-        from cis.utils import apply_mask_to_numpy_array
-        coords = super(GASSP).create_coords(filenames, variable)
-        if variable and variable.starts_with('CCN_COL'):
-            # Work out the associated variable name for this column
-            ccn_flag_var = "COL{}_FLAG".format(variable[:-1])
-            # Read in the flags
-            flags = read_many_files_individually(filenames, ccn_flag_var)[ccn_flag_var]
-            # 0 and 1 are both OK
-            mask = flags[:] < 2
-            # If a variable was supplied then coords must be an ungridded data object, apply the mask to it
-            coords.data = apply_mask_to_numpy_array(coords.data, mask)
-        return coords
+        from cis.data_io.netcdf import read_many_files_individually, get_metadata
+        from cis.utils import apply_mask_to_numpy_array, concatenate
+        from cis.data_io.ungridded_data import UngriddedCoordinates, UngriddedData
+
+        data_variables, variable_selector = self._load_data(filenames, variable)
+
+        dim_coords = self._create_coordinates_list(data_variables, variable_selector)
+
+        if variable is None:
+            return UngriddedCoordinates(dim_coords)
+        else:
+            aux_coord_name = variable_selector.find_auxiliary_coordinate(variable)
+            if aux_coord_name is not None:
+                all_coords = self._add_aux_coordinate(dim_coords, filenames[0], aux_coord_name,
+                                                      dim_coords.get_coord(standard_name='time').data.size)
+            else:
+                all_coords = dim_coords
+
+            var_data = data_variables[variable]
+            if variable and variable.startswith('CCN_COL'):
+                # Work out the associated variable name for this column
+                ccn_flag_var = "COL{}_FLAG".format(variable[-1])
+                # Read in the flags
+                flags = concatenate(read_many_files_individually(filenames, ccn_flag_var)[ccn_flag_var])
+                # 0 and 1 are both OK
+                mask = flags[:] > 1
+                # If a variable was supplied then coords must be an ungridded data object, apply the mask to it
+                var_data = apply_mask_to_numpy_array(concatenate(var_data), mask)
+
+            return UngriddedData(var_data, get_metadata(data_variables[variable][0]), all_coords)
+
 
     def _create_coord(self, coord_axis, data_variable_name, data_variables, standard_name):
         """
