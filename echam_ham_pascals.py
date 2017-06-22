@@ -1,13 +1,50 @@
 from cis.data_io.products import NetCDF_Gridded
+import cis.data_io.gridded_data as gd
+import logging
+
+
+def _get_cubes(filenames, constraints=None, callback=None):
+    import iris
+
+    # Removes warnings and prepares for future Iris change
+    iris.FUTURE.netcdf_promote = True
+
+    filenames_key = tuple(filenames)
+    if filenames_key in gd.CACHED_CUBES:
+        all_cubes = gd.CACHED_CUBES[filenames_key]
+        # print("Reading cached files: {}".format(filenames_key))
+    else:
+        all_cubes = iris.load_raw(filenames, callback=callback)
+        gd.CACHED_CUBES[filenames_key] = all_cubes
+        # print("Caching files: {}".format(filenames_key))
+    if constraints is not None:
+        cubes = all_cubes.extract(constraints=constraints)
+    else:
+        cubes = all_cubes
+    return cubes
+
+
+def load_from_cached_cubes(filenames, constraints=None, callback=None):
+    from iris.exceptions import MergeError, ConcatenateError
+    cubes = _get_cubes(filenames, constraints, callback)
+
+    try:
+        iris_cube = cubes.merge_cube()
+    except MergeError as e:
+        logging.info("Unable to merge cubes on load: \n {}\nAttempting to concatenate instead.".format(e))
+        try:
+            iris_cube = cubes.concatenate_cube()
+        except ConcatenateError as e:
+            logging.error("Unable to concatenate cubes on load: \n {}".format(e))
+            raise ValueError("Unable to create a single cube from arguments given: {}".format(constraints))
+    except ValueError as e:
+        raise ValueError("No cubes found")
+    return gd.make_from_cube(iris_cube)
 
 
 class ECHAM_HAM_Pascals(NetCDF_Gridded):
     """
-<<<<<<< HEAD
-        Plugin for reading ECHAM-HAM NetCDF output files. 
-=======
         Plugin for reading ECHAM-HAM NetCDF output files.
->>>>>>> 02369a85cc6c7b122be6383ce44a9e5420b6e8c3
     """
 
     @staticmethod
@@ -30,7 +67,8 @@ class ECHAM_HAM_Pascals(NetCDF_Gridded):
         import iris
         import cf_units as unit
         variables = []
-        cubes = iris.load(filenames)
+
+        cubes = _get_cubes(filenames, callback=self.load_multiple_files_callback)
 
         for cube in cubes:
             is_time_lat_lon_pressure_altitude_or_has_only_1_point = True
