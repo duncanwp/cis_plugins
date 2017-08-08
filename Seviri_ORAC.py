@@ -87,11 +87,11 @@ class seviri_ORAC_gridded(NetCDF_Gridded):
     #     return cube
 
     def _add_available_aux_coords(self, cube, filenames):
+        from iris.coords import AuxCoord
         import iris
 
-        # Add the lat/lon coords
-        cube.add_aux_coord(iris.load_cube(filenames, 'latitude'), (0, 1))
-        cube.add_aux_coord(iris.load_cube(filenames, 'longitude'), (0, 1))
+        cube.add_aux_coord(AuxCoord(iris.load_cube(filenames, 'latitude').data, 'latitude'), (0, 1))
+        cube.add_aux_coord(AuxCoord(iris.load_cube(filenames, 'longitude'), 'longitude'), (0, 1))
 
     def get_file_format(self, filename):
         return "NetCDF/SEVIRI"
