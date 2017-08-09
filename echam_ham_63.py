@@ -49,6 +49,7 @@ class ECHAM_HAM_63(ECHAM_HAM_Pascals):
     """
         Plugin for reading ECHAM-HAM NetCDF output files. **Air pressure is converted to hPa**
     """
+    priority = 100
 
     def get_variable_names(self, filenames, data_type=None):
         """
@@ -77,7 +78,6 @@ class ECHAM_HAM_63(ECHAM_HAM_Pascals):
                     variables.append(cube.var_name)
                 else:
                     variables.append(cube.name())
-
         return set(variables)
 
     def _add_available_aux_coords(self, cube, filenames):
@@ -95,15 +95,24 @@ class ECHAM_HAM_63(ECHAM_HAM_Pascals):
             hybrid_a_coord = AuxCoord(points=hybrid_a[0].data, long_name='hybrid A coefficient at layer midpoints', units='Pa')
             hybrid_b_coord = AuxCoord(points=hybrid_b[0].data, long_name='hybrid B coefficient at layer midpoints', units='1')
 
-            try:
+            if cube.coords('surface_pressure'):
                 surface_pressure = cube.coord('surface pressure')
-            except CoordinateNotFoundError as e:
-                # If there isn't a surface pressure coordinate we can try and pull out the lowest pressure level
-                surface_pressure_cubes = _get_cubes(filenames, 'atmospheric pressure at interfaces',
-                                                    callback=self.load_multiple_files_callback)
-                surface_pressure_cube = surface_pressure_cubes.concatenate_cube()[:,-1,:,:]
-                surface_pressure = AuxCoord(points=surface_pressure_cube.data, long_name='surface pressure', units='Pa')
-                cube.add_aux_coord(surface_pressure, (0, 2, 3))
+            else:
+                try:
+                    # If there isn't a surface pressure coordinate we can try and pull out the lowest pressure level
+                    surface_pressure_cubes = _get_cubes(filenames, 'atmospheric pressure at interfaces',
+                                                        callback=self.load_multiple_files_callback)
+                    surface_pressure_cube = surface_pressure_cubes.concatenate_cube()[:,-1,:,:]
+                    surface_pressure = AuxCoord(points=surface_pressure_cube.data, long_name='surface pressure', units='Pa')
+                    cube.add_aux_coord(surface_pressure, (0, 2, 3))
+                except ValueError:
+                    # Try and get it from the vphysc stream
+                    v_files = ['_'.join(f.split('_')[:-1]) + '_vphysc.nc' for f in filenames]
+                    surface_pressure_cubes = _get_cubes(v_files, 'atmospheric pressure at interfaces',
+                                                        callback=self.load_multiple_files_callback)
+                    surface_pressure_cube = surface_pressure_cubes.concatenate_cube()[:,-1,:,:]
+                    surface_pressure = AuxCoord(points=surface_pressure_cube.data, long_name='surface pressure', units='Pa')
+                    cube.add_aux_coord(surface_pressure, (0, 2, 3))
 
             # First convert the hybrid coefficients to hPa, so that air pressure will be in hPa
             hybrid_a_coord.convert_units('hPa')
