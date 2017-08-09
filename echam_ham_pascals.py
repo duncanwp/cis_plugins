@@ -56,6 +56,7 @@ class ECHAM_HAM_Pascals(NetCDF_Gridded):
     @staticmethod
     def load_multiple_files_callback(cube, field, filename):
         # We need to remove these global attributes when reading multiple files so that the cubes can be properly merged
+        cube.attributes.pop('history', None)
         cube.attributes.pop('host_name', None)
         cube.attributes.pop('date_time', None)
         return cube
