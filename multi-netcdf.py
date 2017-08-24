@@ -1,10 +1,13 @@
 from cis.data_io.products import NetCDF_Gridded
+import cis.data_io.gridded_data as gd
 
+gd.CACHED_CUBES = {}
 
 class multi_netcdf(NetCDF_Gridded):
     """
         Plugin for reading ECHAM-HAM NetCDF output files. 
     """
+    priority=100
 
     @staticmethod
     def load_multiple_files_callback(cube, field, filename):
@@ -21,7 +24,8 @@ class multi_netcdf(NetCDF_Gridded):
         from iris.aux_factory import HybridPressureFactory
         # Add the derived coordinates back (https://github.com/SciTools/iris/issues/2478)...
         cube = super().create_data_object(filenames, variable)
-        cube.add_aux_factory(HybridPressureFactory(cube.coord('atmosphere_hybrid_sigma_pressure_coordinate'),
-                                                   cube.coord('hybrid B coefficient at layer midpoints'),
-                                                   cube.coord('surface pressure')))
+        if cube.coords('hybrid B coefficient at layer midpoints'):
+            cube.add_aux_factory(HybridPressureFactory(cube.coord('atmosphere_hybrid_sigma_pressure_coordinate'),
+                                                       cube.coord('hybrid B coefficient at layer midpoints'),
+                                                       cube.coord('surface pressure')))
         return cube
