@@ -243,6 +243,10 @@ class Caliop_V4_QC(Caliop_V4_NO_PRESSURE):
             qcd_pres, = mask_data([pressure], cad_score, extinction_qc)
 
             qcd_pres_coord = Coord(qcd_pres.data, qcd_pres.metadata, 'P')
+            # Fix badly formatted units which aren't CF compliant and will break if they are aggregated
+            if str(qcd_pres_coord.units) == "hPA":
+                qcd_pres_coord.units = "hPa"
+
             qcd_var_data._coords.append(qcd_pres_coord)
             qcd_var_data._post_process()
 

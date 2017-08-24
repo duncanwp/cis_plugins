@@ -20,7 +20,9 @@ class cis_fast(AProduct):
         from cis.data_io.ungridded_data import UngriddedCoordinates, UngriddedData
         from cis.exceptions import InvalidVariableError
 
-        variables = [("longitude", "x"), ("latitude", "y"), ("altitude", "z"), ("time", "t"),
+        #variables = [("longitude", "x"), ("latitude", "y"), ("altitude", "z"), ("time", "t"),
+        #             ("air_pressure", "p")]
+        variables = [("longitude", "x"), ("latitude", "y"), ("time", "t"),
                      ("air_pressure", "p")]
 
         # if usr_variable is not None:

@@ -1,10 +1,13 @@
 from cis.data_io.products import NetCDF_Gridded
+import cis.data_io.gridded_data as gd
 
+gd.CACHED_CUBES = {}
 
 class multi_netcdf(NetCDF_Gridded):
     """
         Plugin for reading ECHAM-HAM NetCDF output files. 
     """
+    priority=100
 
     @staticmethod
     def load_multiple_files_callback(cube, field, filename):
