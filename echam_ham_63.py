@@ -95,7 +95,7 @@ class ECHAM_HAM_63(ECHAM_HAM_Pascals):
             hybrid_a_coord = AuxCoord(points=hybrid_a[0].data, long_name='hybrid A coefficient at layer midpoints', units='Pa')
             hybrid_b_coord = AuxCoord(points=hybrid_b[0].data, long_name='hybrid B coefficient at layer midpoints', units='1')
 
-            if cube.coords('surface_pressure'):
+            if cube.coords('surface pressure'):
                 surface_pressure = cube.coord('surface pressure')
             else:
                 try:
