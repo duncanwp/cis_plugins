@@ -1,6 +1,7 @@
 from echam_ham_pascals import ECHAM_HAM_Pascals
 import cis.data_io.gridded_data as gd
 import logging
+from cis.utils import demote_warnings
 
 
 def _get_cubes(filenames, constraints=None, callback=None):
@@ -14,7 +15,8 @@ def _get_cubes(filenames, constraints=None, callback=None):
         all_cubes = gd.CACHED_CUBES[filenames_key]
         # print("Reading cached files: {}".format(filenames_key))
     else:
-        all_cubes = iris.load_raw(filenames, callback=callback)
+        with demote_warnings():
+            all_cubes = iris.load_raw(filenames, callback=callback)
         gd.CACHED_CUBES[filenames_key] = all_cubes
         # print("Caching files: {}".format(filenames_key))
     if constraints is not None:
