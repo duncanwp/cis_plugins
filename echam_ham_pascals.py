@@ -1,6 +1,7 @@
 from cis.data_io.products import NetCDF_Gridded
 import cis.data_io.gridded_data as gd
 import logging
+from cis.utils import demote_warnings
 
 
 def _get_cubes(filenames, constraints=None, callback=None):
@@ -14,7 +15,8 @@ def _get_cubes(filenames, constraints=None, callback=None):
         all_cubes = gd.CACHED_CUBES[filenames_key]
         # print("Reading cached files: {}".format(filenames_key))
     else:
-        all_cubes = iris.load_raw(filenames, callback=callback)
+        with demote_warnings():
+            all_cubes = iris.load_raw(filenames, callback=callback)
         gd.CACHED_CUBES[filenames_key] = all_cubes
         # print("Caching files: {}".format(filenames_key))
     if constraints is not None:
@@ -104,8 +106,9 @@ class ECHAM_HAM_Pascals(NetCDF_Gridded):
             surface_pressure = cube.coord('surface pressure')
         except iris.exceptions.CoordinateNotFoundError as e:
             # If there isn't a surface pressure coordinate we can try and pull out the lowest pressure level
-            surface_pressure_cubes = iris.load(filenames, 'atmospheric pressure at interfaces',
-                                               callback=self.load_multiple_files_callback)
+            with demote_warnings():
+                surface_pressure_cubes = iris.load(filenames, 'atmospheric pressure at interfaces',
+                                                   callback=self.load_multiple_files_callback)
             surface_pressure_cube = surface_pressure_cubes.concatenate_cube()[:, -1, :, :]
             surface_pressure = AuxCoord(points=surface_pressure_cube.data, long_name='surface pressure', units='Pa')
             cube.add_aux_coord(surface_pressure, (0, 2, 3))

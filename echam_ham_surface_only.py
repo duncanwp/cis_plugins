@@ -24,7 +24,7 @@ class ECHAM_HAM_surface_only(ECHAM_HAM):
                 pass
 
         variable_constraint = variable
-        if isinstance(variable, basestring):
+        if isinstance(variable, str):
             variable_constraint = DisplayConstraint(cube_func=(lambda c: c.var_name == variable or
                                                                 c.standard_name == variable or
                                                                 c.long_name == variable), display=variable,

@@ -1,4 +1,5 @@
 from echam_ham_pascals import ECHAM_HAM_Pascals
+from cis.utils import demote_warnings
 
 
 class ECHAM_HAM(ECHAM_HAM_Pascals):
@@ -21,8 +22,9 @@ class ECHAM_HAM(ECHAM_HAM_Pascals):
                 surface_pressure = cube.coord('surface pressure')
             except iris.exceptions.CoordinateNotFoundError as e:
                 # If there isn't a surface pressure coordinate we can try and pull out the lowest pressure level
-                surface_pressure_cubes = iris.load(filenames, 'atmospheric pressure at interfaces',
-                                                   callback=self.load_multiple_files_callback)
+                with demote_warnings():
+                    surface_pressure_cubes = iris.load(filenames, 'atmospheric pressure at interfaces',
+                                                       callback=self.load_multiple_files_callback)
                 surface_pressure_cube = surface_pressure_cubes.concatenate_cube()[:, -1, :, :]
                 surface_pressure = AuxCoord(points=surface_pressure_cube.data, long_name='surface pressure', units='Pa')
                 cube.add_aux_coord(surface_pressure, (0, 2, 3))
