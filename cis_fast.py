@@ -1,5 +1,7 @@
 """
-Workaround for a bug introduced in 1.5.2 where all units got converted to lower case....
+CIS plugin which reads the netcdf files in one go rather than once per variable which gets pretty slow
+
+I shouldn't need this once we use Iris to read everything
 """
 from cis.data_io.products import AProduct
 from cf_units import Unit
@@ -15,26 +17,35 @@ class cis_fast(AProduct):
         return [r'.*\.nc']
 
     def create_coords(self, filenames, usr_variable=None):
-        from cis.data_io.netcdf import read_many_files_individually, get_metadata
+        from cis.data_io.netcdf import read_many_files_individually, get_metadata, get_netcdf_file_variables
         from cis.data_io.Coord import Coord, CoordList
         from cis.data_io.ungridded_data import UngriddedCoordinates, UngriddedData
         from cis.exceptions import InvalidVariableError
 
-        #variables = [("longitude", "x"), ("latitude", "y"), ("altitude", "z"), ("time", "t"),
-        #             ("air_pressure", "p")]
-        variables = [("longitude", "x"), ("latitude", "y"), ("time", "t"),
-                     ("air_pressure", "p")]
+        # We have to read it once first to find out which variables are in there. We assume the set of coordinates in
+        # all the files are the same
+        file_variables = get_netcdf_file_variables(filenames[0])
 
-        # if usr_variable is not None:
-        #     variables.append((usr_variable, ''))
+        axis_lookup = {"longitude": "x", 'latitude': 'y', 'altitude': 'z', 'time': 't', 'air_pressure': 'p'}
 
-        logging.info("Listing coordinates: " + str(variables))
+        all_coord_variables = [(v, axis_lookup[v]) for v in file_variables if v in axis_lookup]
+        # Get rid of any duplicates
+        coord_variables = []
+        for v in all_coord_variables:
+            if v is None or v[1][1] not in [x[1][1] for x in coord_variables]:
+                coord_variables.append(v)
+
+        all_variables = coord_variables.copy()
+        if usr_variable is not None:
+            all_variables.append((usr_variable, ''))
+
+        logging.info("Listing coordinates: " + str(all_variables))
 
         coords = CoordList()
-        var_data = read_many_files_individually(filenames, [v[0] for v in variables])
-        for var, (name, axis) in zip(var_data.values(), variables):
+        var_data = read_many_files_individually(filenames, [v[0] for v in all_variables])
+        for name, axis in coord_variables:
             try:
-                coords.append(Coord(var, get_metadata(var[0]), axis=axis))
+                coords.append(Coord(var_data[name], get_metadata(var_data[name][0]), axis=axis))
             except InvalidVariableError:
                 pass
 
@@ -44,8 +55,7 @@ class cis_fast(AProduct):
         if usr_variable is None:
             res = UngriddedCoordinates(coords)
         else:
-            usr_var_data = read_many_files_individually(filenames, usr_variable)[usr_variable]
-            res = UngriddedData(usr_var_data, get_metadata(usr_var_data[0]), coords)
+            res = UngriddedData(var_data[usr_variable], get_metadata(var_data[usr_variable][0]), coords)
 
         return res
 
