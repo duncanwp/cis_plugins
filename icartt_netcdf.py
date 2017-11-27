@@ -1,17 +1,11 @@
 """
-CIS plugin which reads the netcdf files in one go rather than once per variable which gets pretty slow
-
-I shouldn't need this once we use Iris to read everything
+A plugin for reading converted ICARTT files
 """
 from cis.data_io.products import AProduct
-from cf_units import Unit
 import logging
 
 
-class cis_fast(AProduct):
-    # If a file matches the CIS product signature as well as another signature (e.g. because we aggregated from another
-    # data product) we need to prioritise the CIS data product
-    priority = 100
+class icartt_netcdf(AProduct):
 
     def get_file_signature(self):
         return [r'.*\.nc']
@@ -26,9 +20,22 @@ class cis_fast(AProduct):
         # all the files are the same
         file_variables = get_netcdf_file_variables(filenames[0])
 
-        axis_lookup = {"longitude": "x", 'latitude': 'y', 'altitude': 'z', 'time': 't', 'air_pressure': 'p'}
+        def get_axis_std_name(var):
+            axis=None
+            lvar = var.lower()
+            if lvar == 'longitude':
+                axis = 'x', 'longitude'
+            if lvar == 'latitude':
+                axis = 'y', 'latitude'
+            if lvar == 'G_ALT' or lvar == 'altitude':
+                axis = 'z', 'altitude'
+            if lvar == 'time':
+                axis = 't', 'time'
+            if lvar == 'p' or lvar == 'pressure':
+                axis = 'p', 'air_pressure'
+            return axis
 
-        all_coord_variables = [(v, axis_lookup[v]) for v in file_variables if v in axis_lookup]
+        all_coord_variables = [(v, get_axis_std_name(v)) for v in file_variables if get_axis_std_name(v) is not None]
         # Get rid of any duplicates
         coord_variables = []
         for v in all_coord_variables:
@@ -43,9 +50,12 @@ class cis_fast(AProduct):
 
         coords = CoordList()
         var_data = read_many_files_individually(filenames, [v[0] for v in all_variables])
-        for name, axis in coord_variables:
+        for name, axis_std_name in coord_variables:
             try:
-                coords.append(Coord(var_data[name], get_metadata(var_data[name][0]), axis=axis))
+                meta = get_metadata(var_data[name][0])
+                if meta.standard_name is None:
+                    meta.standard_name = axis_std_name[1]
+                coords.append(Coord(var_data[name], meta, axis=axis_std_name[0]))
             except InvalidVariableError:
                 pass
 
@@ -63,7 +73,7 @@ class cis_fast(AProduct):
         return self.create_coords(filenames, variable)
 
     def get_file_format(self, filename):
-        return "NetCDF/CIS"
+        return "NetCDF/ICARTT"
 
     def get_file_type_error(self, filename):
         """
@@ -75,11 +85,11 @@ class cis_fast(AProduct):
         atts = get_netcdf_file_attributes(filename)
         errors = None
         try:
-            source = atts['source']
+            history = atts['history']
         except KeyError as ex:
-            errors = ['No source attribute found in {}'.format(filename)]
+            errors = ['No history attribute found in {}'.format(filename)]
         else:
-            if not source.startswith('CIS'):
-                errors = ['Source ({}) does not match CIS in {}'.format(source, filename)]
+            if "Assembled using assemble and _readict" not in history:
+                errors = ['History ({}) does not appear to match ICARTT output in {}'.format(history, filename)]
         return errors
 

@@ -1,6 +1,47 @@
 from cis.data_io.products.NCAR_NetCDF_RAF import NCAR_NetCDF_RAF, NCAR_NetCDF_RAF_variable_name_selector
 
 
+def expand_1d_to_2d_array(array, length, axis=0):
+    """
+    General utility routine to 'extend arbitrary dimensional array into a higher dimension
+    by duplicating the data along a given 'axis' (default is 0) of size 'length'.
+
+    Examples::
+
+        >>> a = np.array([1, 2, 3, 4])
+        >>> expand_1d_to_2d_array(a, 4, axis=0)
+        [[1 2 3 4]
+         [1 2 3 4]
+         [1 2 3 4]
+         [1 2 3 4]]
+
+        >>> a = np.array([1, 2, 3, 4])
+        >>> expand_1d_to_2d_array(a, 4, axis=1)
+        [[1 1 1 1]
+         [2 2 2 2]
+         [3 3 3 3]
+         [4 4 4 4]]
+
+    :param array:
+    :param length:
+    :param axis:
+    :return:
+    """
+    import numpy as np
+
+    if axis == 0:
+        array_2d = np.broadcast_to(array, (length, array.size))
+        if isinstance(array, np.ma.MaskedArray):
+            array_2d = np.ma.array(array_2d, mask=np.broadcast_to(array.mask, (length, array.size)))
+    else:
+        reshaped = array.reshape(array.size, 1)
+        array_2d = np.broadcast_to(reshaped, (array.size, length))
+        if isinstance(reshaped, np.ma.MaskedArray):
+            array_2d = np.ma.array(array_2d, mask=np.broadcast_to(reshaped.mask, (array.size, length)))
+
+    return array_2d
+
+
 class GASSP_variable_name_selector(NCAR_NetCDF_RAF_variable_name_selector):
     # Static air pressure value for faam rack measurements
     CORRECTED_PRESSURE_VAR_NAME = 'PS_RVSM'
@@ -49,6 +90,34 @@ class GASSP_variable_name_selector(NCAR_NetCDF_RAF_variable_name_selector):
         else:
             self.altitude = [self.DEFAULT_ALTITUDE for attr in self._attributes]
 
+    def find_auxiliary_coordinate(self, variable):
+        """
+        Find the variable name of an auxiliary coordinate for the given variable (if there is one).
+
+        :param str variable: The data variable we're checking for any auxiliary coordinates
+        :return str or None: The name of the variable holding the auxiliary coordinate or None
+        """
+        aux_coord_name = None
+        dim_coord_names = [self.latitude_variable_name, self.longitude_variable_name,
+                           self.altitude_variable_name, self.pressure_variable_name] + list(self.time_dimensions)
+        # Find the *dimension* which corresponds to the auxiliary coordinate
+        aux_coords = [dim for dim in self._variable_dimensions[0][variable] if dim not in dim_coord_names]
+        if len(aux_coords) > 1:
+            raise InvalidVariableError("CIS currently only supports reading data variables with one auxilliary "
+                                       "coordinate")
+        elif len(aux_coords) == 1:
+            # If there is also a variable named after that dimension then this is the variable we're after
+            if aux_coords[0] in self._variable_dimensions[0]:
+                aux_coord_name = aux_coords[0]
+            # Otherwise we need to look through all the variables and choose the first variable whose dimension is only
+            #  the auxiliary dimension.
+            else:
+                for v, dims in self._variable_dimensions[0].items():
+                    if dims[0] == aux_coords[0]:
+                        aux_coord_name = v
+                        break
+        return aux_coord_name
+
 
 class GASSP(NCAR_NetCDF_RAF):
 
@@ -59,6 +128,34 @@ class GASSP(NCAR_NetCDF_RAF):
         :return:nothing
         """
         super(GASSP, self).__init__(variable_selector_class=variable_selector_class)
+
+    @staticmethod
+    def _add_aux_coordinate(dim_coords, filename, aux_coord_name, length):
+        """
+        Add an auxiliary coordinate to a list of (reshaped) dimension coordinates
+
+        :param dim_coords: CoordList of one-dimensional coordinates representing physical dimensions
+        :param filename: The data file containing the aux coord
+        :param aux_coord_name: The name of the aux coord to add to the coord list
+        :param length: The length of the data dimensions which this auxiliary coordinate should span
+        :return: A CoordList of reshaped (2D) physical coordinates plus the 2D auxiliary coordinate
+        """
+        from cis.data_io.Coord import Coord
+        from cis.data_io.netcdf import read, get_metadata
+
+        # We assume that the auxilliary coordinate is the same shape across files
+        d = read(filename, [aux_coord_name])[aux_coord_name]
+        # Reshape to the length given
+        aux_data = expand_1d_to_2d_array(d[:], length, axis=0)
+        # Get the length of the auxiliary coordinate
+        len_y = d[:].size
+
+        for dim_coord in dim_coords:
+            dim_coord.data = expand_1d_to_2d_array(dim_coord.data, len_y, axis=1)
+
+        all_coords = dim_coords + [Coord(aux_data, get_metadata(d))]
+
+        return all_coords
 
     def create_coords(self, filenames, variable=None):
         """
@@ -95,7 +192,6 @@ class GASSP(NCAR_NetCDF_RAF):
                 var_data = apply_mask_to_numpy_array(concatenate(var_data), mask)
 
             return UngriddedData(var_data, get_metadata(data_variables[variable][0]), all_coords)
-
 
     def _create_coord(self, coord_axis, data_variable_name, data_variables, standard_name):
         """
