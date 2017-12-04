@@ -75,18 +75,19 @@ class Caliop_V4(Caliop_L2):
     def create_data_object(self, filenames, variable):
         logging.debug("Creating data object for variable " + variable)
 
-        # reading coordinates
-        if variable.startswith('Column'):
-            coords = self._create_one_dimensional_coord_list(filenames, index_offset=1)
-        else:
-            coords = self._create_coord_list(filenames, index_offset=1)
-
         # reading of variables
         sdata, vdata = hdf.read(filenames, variable)
 
         # retrieve data + its metadata
         var = sdata[variable]
         metadata = hdf.read_metadata(var, "SD")
+
+        # reading coordinates
+        # See if the variable is one dimensional (check the length of shape, neglecting length 1 dimensions)
+        if len([l for l in metadata.shape if l > 1]) == 1:
+            coords = self._create_one_dimensional_coord_list(filenames, index_offset=1)
+        else:
+            coords = self._create_coord_list(filenames, index_offset=1)
 
         if variable in MIXED_RESOLUTION_VARIABLES:
             logging.warning("Using Level 2 resolution profile for mixed resolution variable {}. See CALIPSO "
