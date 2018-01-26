@@ -7,6 +7,8 @@ from cis.data_io.gridded_data import GriddedData
 import cis.utils as utils
 from cis.time_util import cis_standard_time_unit
 import numpy as np
+from cf_units import Unit
+
 
 class hsrl(AProduct):
     def get_file_signature(self):
@@ -34,14 +36,21 @@ class hsrl(AProduct):
 
         var_data = read_many_files_individually(filenames, [v[0] for v in variables])
 
-        time_data = utils.concatenate([get_data(i) for i in var_data['ER2_IMU/gps_time']])
-        # Date is stored as an array (of length 92??) of floats with format: yyyymmdd
-        date_str = str(int(var_data['header/date'][0][0]))
-        # Flatten the data by taking the 0th column of the transpose
-        time_coord = DimCoord(time_data.T[0], standard_name='time',
-                              units='hours since {}-{}-{} 00:00:00'.format(date_str[0:4], date_str[4:6], date_str[6:8]))
-        time_coord.convert_units(cis_standard_time_unit)
 
+        date_times = []
+        for times, date in zip(var_data['ER2_IMU/gps_time'], var_data['header/date']):
+            # Date is stored as an array (of length 92??) of floats with format: yyyymmdd
+            date_str = str(int(date[0]))
+            t_unit = Unit('hours since {}-{}-{} 00:00:00'.format(date_str[0:4], date_str[4:6], date_str[6:8]))
+            date_times.append(t_unit.convert(get_data(times), cis_standard_time_unit))
+
+        # time_data = utils.concatenate([get_data(i) for i in var_data['ER2_IMU/gps_time']])
+        # date_str = str(int(var_data['header/date'][0][0]))
+        # Flatten the data by taking the 0th column of the transpose
+        time_coord = DimCoord(utils.concatenate(date_times).T[0], standard_name='time',
+                              units=cis_standard_time_unit)
+
+        # TODO This won't work for multiple files since the altitude bins are different for each flight...
         alt_data = utils.concatenate([get_data(i) for i in var_data["DataProducts/Altitude"]])
         alt_coord = DimCoord(alt_data[0], standard_name='altitude', units='m')
 
