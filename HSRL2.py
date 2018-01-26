@@ -56,6 +56,8 @@ class hsrl(AProduct):
 
         pres_data = utils.concatenate([get_data(i) for i in var_data["State/Pressure"]])
         pres_coord = AuxCoord(pres_data, standard_name='air_pressure', units='atm')
+        # Fix the air-pressure units
+        pres_coord.convert_units('hPa')
 
         lat_data = utils.concatenate([get_data(i) for i in var_data['ER2_IMU/Latitude']])
         lat_coord = AuxCoord(lat_data.T[0], standard_name='latitude')
