@@ -117,7 +117,8 @@ class Caliop_L2_cube(AProduct):
 
     @staticmethod
     def clean_units(units):
-        lookup = {'NoUnits': '', 'sr^-1km^-1': 'sr^-1 km^-1', 'per kilometer': 'km-1'}
+        lookup = {'NoUnits': '', 'sr^-1km^-1': 'sr^-1 km^-1', 'per kilometer': 'km-1',
+                  'per kilometer per steradian': 'km^-1 sr^-1'}
         # Get the units from the lookup, if they're not in there use the original
         return lookup.get(units, units)
 
