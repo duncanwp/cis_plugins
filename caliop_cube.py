@@ -283,10 +283,10 @@ class Caliop_L3_cube(AProduct):
         alt_coord.convert_units('m')
 
         lat_data = self._get_calipso_data(hdf_sd.HDF_SDS(filenames[0], 'Latitude_Midpoint'))[0, :]
-        lat_coord = DimCoord(lat_data, standard_name='latitude')
+        lat_coord = DimCoord(lat_data, standard_name='latitude', units='degrees_north')
 
         lon_data = self._get_calipso_data(hdf_sd.HDF_SDS(filenames[0], 'Longitude_Midpoint'))[0, :]
-        lon_coord = DimCoord(lon_data, standard_name='longitude')
+        lon_coord = DimCoord(lon_data, standard_name='longitude', units='degrees_east')
 
         cubes = CubeList()
         for f in filenames:
