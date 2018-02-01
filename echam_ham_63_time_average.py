@@ -7,6 +7,12 @@ class ECHAM_HAM_63_average_pressure(ECHAM_HAM_63):
     """
     priority = 100
 
+
+    @staticmethod
+    def load_single_file_callback(cube, field, filename):
+        # Don't squeeze, since we need the length-one dims to reconstruct the pressure
+        return cube
+
     def _add_available_aux_coords(self, cube, filenames):
         import iris
         from iris.aux_factory import HybridPressureFactory
@@ -25,7 +31,7 @@ class ECHAM_HAM_63_average_pressure(ECHAM_HAM_63):
                 surface_pressure = cube.coord('surface pressure')
             else:
                 surface_pressure = AuxCoord(points=[1013.25], long_name='surface pressure', units='hPa')
-                cube.add_aux_coord(surface_pressure, (0, 2, 3))
+                cube.add_aux_coord(surface_pressure, ())
 
             # First convert the hybrid coefficients to hPa, so that air pressure will be in hPa
             hybrid_a_coord.convert_units('hPa')
