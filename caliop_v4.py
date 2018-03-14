@@ -15,6 +15,71 @@ class Caliop_L1_NO_PRESSURE(Caliop_L1):
     """
     include_pressure = False
 
+    def _get_calipso_data(self, sds):
+        """
+        Reads raw data from an SD instance. Automatically applies the
+        scaling factors and offsets to the data arrays found in Calipso data.
+
+        Returns:
+            A numpy array containing the raw data with missing data is replaced by NaN.
+
+        Arguments:
+            sds        -- The specific sds instance to read
+
+        """
+        from cis.utils import create_masked_array_for_missing_data
+        import numpy as np
+
+        calipso_fill_values = {'Float_32': -9999.0,
+                               # 'Int_8' : 'See SDS description',
+                               'Int_16': -9999,
+                               'Int_32': -9999,
+                               'UInt_8': -127,
+                               # 'UInt_16' : 'See SDS description',
+                               # 'UInt_32' : 'See SDS description',
+                               'ExtinctionQC Fill Value': 32768,
+                               'FeatureFinderQC No Features Found': 32767,
+                               'FeatureFinderQC Fill Value': 65535}
+
+        data = sds.get()
+        attributes = sds.attributes()
+
+        # Missing data. First try 'fillvalue'
+        missing_val = attributes.get('fillvalue', None)
+        if missing_val is None:
+            try:
+                # Now try and lookup the fill value based on the data type
+                missing_val = calipso_fill_values[attributes.get('format', None)]
+            except KeyError:
+                # Last guess
+                missing_val = attributes.get('_FillValue', None)
+
+        if missing_val is not None:
+            data = create_masked_array_for_missing_data(data, float(missing_val))
+
+        # Now handle valid range mask
+        valid_range = attributes.get('valid_range', None)
+        if valid_range is not None:
+            # Split the range into two numbers of the right type (removing commas in the floats...)
+            # TODO This check needs adding back to the CIS plugin
+            v_range = np.asarray(valid_range.replace(',','').split("..."))
+            # Some valid_ranges appear to have only one value, so ignore those...
+            # Also check that we can safely cast the range values to their target type
+            if (len(v_range) == 2) and np.can_cast(v_range, data.dtype):
+                v_range = v_range.astype(data.dtype)
+                logging.debug("Masking all values {} > v > {}.".format(*v_range))
+                data = np.ma.masked_outside(data, *v_range)
+            else:
+                logging.warning("Invalid valid_range: {}. Not masking values.".format(valid_range))
+
+        # Offsets and scaling.
+        offset = attributes.get('add_offset', 0)
+        scale_factor = attributes.get('scale_factor', 1)
+        data = self._apply_scaling_factor_CALIPSO(data, scale_factor, offset)
+
+        return data
+
+
 
 class Caliop_V4_QC_directly_creating_vars(Caliop_L2_NO_PRESSURE):
 
