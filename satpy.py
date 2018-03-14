@@ -1,25 +1,29 @@
-from datetime import datetime
-from satpy.scene import Scene
 from iris.coords import AuxCoord
 from iris.cube import Cube
 
-scn = Scene(
-    platform_name="SNPP",
-    sensor="viirs",
-    start_time=datetime(2015, 4, 20, 12, 3),
-    end_time=datetime(2015, 4, 20, 12, 10),
-    base_dir="/home/a000680/data/polar_in/direct_readout/npp/lvl1/npp_20150420_1202_18019",
-    reader="viirs_sdr"
-)
 
-scn.load(['M05', 'M08', 'M15'])
+def scene_examples():
+    from datetime import datetime
+    from satpy.scene import Scene
 
-met10scn = Scene(
-    sensor="seviri",
-    base_dir="/home/a000680/data/hrit/20150420",
-    reader="hrit_msg"
-)
-met10scn.load([0.6, 0.8, 11.0])
+    scn = Scene(
+        platform_name="SNPP",
+        sensor="viirs",
+        start_time=datetime(2015, 4, 20, 12, 3),
+        end_time=datetime(2015, 4, 20, 12, 10),
+        base_dir="/home/a000680/data/polar_in/direct_readout/npp/lvl1/npp_20150420_1202_18019",
+        reader="viirs_sdr"
+    )
+
+    scn.load(['M05', 'M08', 'M15'])
+
+    met10scn = Scene(
+        sensor="seviri",
+        base_dir="/home/a000680/data/hrit/20150420",
+        reader="hrit_msg"
+    )
+    met10scn.load([0.6, 0.8, 11.0])
+    return
 
 
 def scene_to_iris(scn, var_name):
