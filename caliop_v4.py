@@ -1,4 +1,4 @@
-from cis.data_io.products.caliop import Caliop_L2, Caliop_L2_NO_PRESSURE, Caliop_L1_NO_PRESSURE
+from cis.data_io.products.caliop import Caliop_L2, Caliop_L2_NO_PRESSURE, Caliop_L1
 import logging
 from cis.data_io import hdf as hdf
 from cis.data_io.Coord import Coord
@@ -7,6 +7,13 @@ from cis.data_io.ungridded_data import UngriddedData
 
 MIXED_RESOLUTION_VARIABLES = ['Atmospheric_Volume_Description', 'CAD_Score',
                               'Extinction_QC_Flag_1064', 'Extinction_QC_Flag_532']
+
+
+class Caliop_L1_NO_PRESSURE(Caliop_L1):
+    """
+    Read CALIOP L2 data without the pressure coordinate (which is often masked and causes the data to be flattened)
+    """
+    include_pressure = False
 
 
 class Caliop_V4_QC_directly_creating_vars(Caliop_L2_NO_PRESSURE):
