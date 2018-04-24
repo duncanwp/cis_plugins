@@ -63,7 +63,7 @@ class GASSP(NCAR_NetCDF_RAF):
         :param standard_name: the standard name it should have
         :return: a coords object
         """
-        from cis.data_io.netcdf import get_metadata, get_data
+        from cis.data_io.netcdf import get_metadata
         from cis.data_io.Coord import Coord
         from cf_units import Unit
         import logging
@@ -97,3 +97,16 @@ class GASSP(NCAR_NetCDF_RAF):
             coordinate_data_objects.append(Coord(data, m, coord_axis))
 
         return Coord.from_many_coordinates(coordinate_data_objects)
+
+
+def get_data(var):
+    # FIXME: THIS IS COPIED FROM CIS 1.6, and is a nasty hack needed because of crap data
+    from cis.data_io.netcdf import apply_offset_and_scaling, get_data
+    import numpy as np
+    import logging
+
+    var.set_auto_mask(False)
+
+    data = get_data(var)
+
+    return data
