@@ -46,11 +46,12 @@ class GASSP(NCAR_NetCDF_RAF):
                 # Work out the associated variable name for this column
                 ccn_flag_var = "COL{}_FLAG".format(variable[-1])
                 # Read in the flags
-                flags = concatenate(read_many_files_individually(filenames, ccn_flag_var)[ccn_flag_var])
+                flags = concatenate([get_data(v) for v in read_many_files_individually(filenames, ccn_flag_var)[
+                    ccn_flag_var]])
                 # 0 and 1 are both OK
-                mask = flags[:] > 1
+                mask = flags > 1
                 # If a variable was supplied then coords must be an ungridded data object, apply the mask to it
-                var_data = apply_mask_to_numpy_array(concatenate(var_data), mask)
+                var_data = apply_mask_to_numpy_array(concatenate([get_data(v) for v in var_data]), mask)
 
             return UngriddedData(var_data, get_metadata(data_variables[variable][0]), all_coords)
 
