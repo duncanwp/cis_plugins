@@ -110,8 +110,12 @@ class ECHAM_HAM_63(ECHAM_HAM_Pascals):
                 except ValueError:
                     # Try and get it from the vphysc stream
                     v_files = ['_'.join(f.split('_')[:-1]) + '_vphysc.nc' for f in filenames]
-                    surface_pressure_cubes = _get_cubes(v_files, 'atmospheric pressure at interfaces',
-                                                        callback=self.load_multiple_files_callback)
+                    try:
+                        surface_pressure_cubes = _get_cubes(v_files, 'atmospheric pressure at interfaces',
+                                                            callback=self.load_multiple_files_callback)
+                    except:
+                        # If we can't do that then just exit - there must be a cleaner way to do this...
+                        return
                     surface_pressure_cube = surface_pressure_cubes.concatenate_cube()[:,-1,:,:]
                     surface_pressure = AuxCoord(points=surface_pressure_cube.data, long_name='surface pressure', units='Pa')
                     cube.add_aux_coord(surface_pressure, (0, 2, 3))
