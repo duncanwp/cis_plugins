@@ -3,10 +3,8 @@ import os
 
 import numpy as np
 
-from cis.data_io.Coord import CoordList
 from cis.exceptions import FileFormatError
 from cis.data_io.products import AProduct
-from cis.data_io.ungridded_data import UngriddedCoordinates, UngriddedData, Metadata
 from cis.utils import add_to_list_if_not_none, listify
 from cis.data_io.netcdf import get_metadata, get_netcdf_file_attributes, read_many_files_individually, \
     get_netcdf_file_variables
@@ -136,7 +134,7 @@ class NCAR_NetCDF_RAF_Cube(AProduct):
         :param variable_selector: the variable selector for the data
         :return: a list of coordinates
         """
-        coords = CoordList()
+        coords = []
 
         # Time
         time_coord = self._create_time_coord(variable_selector.time_stamp_info, variable_selector.time_variable_name,
@@ -172,35 +170,6 @@ class NCAR_NetCDF_RAF_Cube(AProduct):
                 self._create_coord("P", variable_selector.pressure_variable_name, data_variables, "air_pressure"))
         return coords
 
-    @staticmethod
-    def _add_aux_coordinate(dim_coords, filename, aux_coord_name, length):
-        """
-        Add an auxiliary coordinate to a list of (reshaped) dimension coordinates
-
-        :param dim_coords: CoordList of one-dimensional coordinates representing physical dimensions
-        :param filename: The data file containing the aux coord
-        :param aux_coord_name: The name of the aux coord to add to the coord list
-        :param length: The length of the data dimensions which this auxiliary coordinate should span
-        :return: A CoordList of reshaped (2D) physical coordinates plus the 2D auxiliary coordinate
-        """
-        from cis.data_io.Coord import Coord
-        from cis.utils import expand_1d_to_2d_array
-        from cis.data_io.netcdf import read
-
-        # We assume that the auxilliary coordinate is the same shape across files
-        d = read(filename, [aux_coord_name])[aux_coord_name]
-        # Reshape to the length given
-        aux_data = expand_1d_to_2d_array(d[:], length, axis=0)
-        # Get the length of the auxiliary coordinate
-        len_y = d[:].size
-
-        for dim_coord in dim_coords:
-            dim_coord.data = expand_1d_to_2d_array(dim_coord.data, len_y, axis=1)
-
-        all_coords = dim_coords + [Coord(aux_data, get_metadata(d))]
-
-        return all_coords
-
     def create_coords(self, filenames, variable=None):
         """
         Reads the coordinates and data if required from the files
@@ -208,20 +177,32 @@ class NCAR_NetCDF_RAF_Cube(AProduct):
         :param variable: load a variable for the data
         :return: Coordinates
         """
+        from iris.cube import Cube
+        from iris.coords import DimCoord
+        from cis.data_io.netcdf import read
+        from cis.utils import concatenate
+
         data_variables, variable_selector = self._load_data(filenames, variable)
 
-        dim_coords = self._create_coordinates_list(data_variables, variable_selector)
+        aux_coords = self._create_coordinates_list(data_variables, variable_selector)
+        dim_coords = [(DimCoord(np.arange(len(aux_coords[0].points)), var_name='obs'), (0,))]
 
         if variable is None:
-            return UngriddedCoordinates(dim_coords)
-        else:
-            aux_coord_name = variable_selector.find_auxiliary_coordinate(variable)
-            if aux_coord_name is not None:
-                all_coords = self._add_aux_coordinate(dim_coords, filenames[0], aux_coord_name,
-                                                      dim_coords.get_coord(standard_name='time').data.size)
-            else:
-                all_coords = dim_coords
-            return UngriddedData(data_variables[variable], get_metadata(data_variables[variable][0]), all_coords)
+            raise ValueError("Must specify variable")
+
+        aux_coord_name = variable_selector.find_auxiliary_coordinate(variable)
+        if aux_coord_name is not None:
+            # We assume that the auxilliary coordinate is the same shape across files
+            v = read(filenames[0], [aux_coord_name])[aux_coord_name]
+            aux_meta = get_metadata(v)
+            # We have to assume the shape here...
+            dim_coords.append((DimCoord(v[:], var_name=aux_coord_name, units=aux_meta.units,
+                                    long_name=aux_meta.long_name), (1,)))
+
+        cube_meta = get_metadata(data_variables[variable][0])
+        return Cube(concatenate([d[:] for d in data_variables[variable]]),
+                    units=cube_meta.units, var_name=variable, long_name=cube_meta.long_name,
+                    dim_coords_and_dims=dim_coords, aux_coords_and_dims=[(c, (0,)) for c in aux_coords])
 
     def create_data_object(self, filenames, variable):
         """
@@ -241,15 +222,13 @@ class NCAR_NetCDF_RAF_Cube(AProduct):
         :param standard_name: the standard name it should have
         :return: a coords object
         """
-        from cis.data_io.Coord import Coord
+        from iris.coords import AuxCoord
+        from cis.utils import concatenate
+        data = concatenate([d[:] for d in data_variables[data_variable_name]])
 
-        coordinate_data_objects = []
-        for d in data_variables[data_variable_name]:
-            m = get_metadata(d)
-            m.standard_name = standard_name
-            coordinate_data_objects.append(Coord(d, m, coord_axis))
+        m = get_metadata(data_variables[data_variable_name][0])
 
-        return Coord.from_many_coordinates(coordinate_data_objects)
+        return AuxCoord(data, units=m.units, standard_name=standard_name)
 
     def _create_time_coord(self, timestamp, time_variable_name, data_variables, coord_axis='T', standard_name='time'):
         """
@@ -261,21 +240,24 @@ class NCAR_NetCDF_RAF_Cube(AProduct):
         :param standard_name: Coord standard name, default 'time'
         :return: Coordinate
         """
-        from cis.data_io.Coord import Coord
+        from iris.coords import AuxCoord
         from six.moves import zip_longest
+        from cis.time_util import convert_time_using_time_stamp_info_to_std_time as convert, cis_standard_time_unit
+        from cis.utils import concatenate
 
         timestamps = listify(timestamp)
         time_variables = data_variables[time_variable_name]
-        time_coords = []
+        time_data = []
         # Create a coordinate for each separate file to account for differing timestamps
         for file_time_var, timestamp in zip_longest(time_variables, timestamps):
             metadata = get_metadata(file_time_var)
-            metadata.standard_name = standard_name
-            coord = Coord(file_time_var, metadata, coord_axis)
-            coord.convert_to_std_time(timestamp)
-            time_coords.append(coord)
+            if timestamp is not None:
+                time_d = convert(file_time_var[:], metadata.units, timestamp)
+            else:
+                time_d = metadata.units.convert(file_time_var[:], cis_standard_time_unit)
+            time_data.append(time_d)
 
-        return Coord.from_many_coordinates(time_coords)
+        return AuxCoord(concatenate(time_data), standard_name=standard_name, units=cis_standard_time_unit)
 
     def _create_fixed_value_coord(self, coord_axis, values, coord_units, points_counts, coord_name):
         """
@@ -287,18 +269,11 @@ class NCAR_NetCDF_RAF_Cube(AProduct):
         :param values: Value of coordinate, or list of values for multiple files
         :return:
         """
-        from cis.data_io.Coord import Coord
+        from iris.coords import AuxCoord
 
-        values = listify(values)
-        points_counts = listify(points_counts)
-        all_points = np.array([])
-        # Create separate arrays with values and sizes corresponding to each of the different input files.
-        for value, points_count in zip(values, points_counts):
-            file_points = np.ma.array(np.zeros(points_count) + float(value))
-            all_points = np.append(all_points, file_points)
-        metadata = Metadata(name=coord_name, shape=all_points.shape, units=coord_units,
-                            range=(min(values), max(values)))
-        return Coord(all_points, metadata, coord_axis)
+        all_points = np.array(listify(values))
+
+        return AuxCoord(all_points, units=coord_units, standard_name=coord_name)
 
     def get_variable_names(self, filenames, data_type=None):
         """
