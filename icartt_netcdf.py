@@ -27,11 +27,11 @@ class icartt_netcdf(AProduct):
                 axis = 'x', 'longitude'
             if lvar == 'latitude':
                 axis = 'y', 'latitude'
-            if lvar == 'G_ALT' or lvar == 'altitude':
+            if lvar == 'G_ALT' or lvar == 'altitude' or lvar == 'pressure_altitude':
                 axis = 'z', 'altitude'
             if lvar == 'time':
                 axis = 't', 'time'
-            if lvar == 'p' or lvar == 'pressure':
+            if lvar == 'p' or lvar == 'pressure' or lvar == 'static_pressure':
                 axis = 'p', 'air_pressure'
             return axis
 
