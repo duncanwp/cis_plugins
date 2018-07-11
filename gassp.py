@@ -110,4 +110,10 @@ def get_data(var):
 
     data = get_data(var)
 
+    # If the data isn't in the native endianess then flip it (in case it ends up in Pandas)
+    # See https://docs.scipy.org/doc/numpy-1.10.1/user/basics.byteswapping.html#data-and-dtype-endianness-match-swap-data-and-dtype
+    #  and https://stackoverflow.com/questions/30283836/creating-pandas-dataframe-from-numpy-array-leads-to-strange-errors
+    if data.dtype.byteorder != '=':
+        data = data.byteswap().newbyteorder()
+
     return data
