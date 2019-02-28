@@ -117,7 +117,8 @@ class Caliop_L2_cube(AProduct):
 
     @staticmethod
     def clean_units(units):
-        lookup = {'NoUnits': '', 'sr^-1km^-1': 'sr^-1 km^-1', 'per kilometer': 'km-1'}
+        lookup = {'NoUnits': '', 'sr^-1km^-1': 'sr^-1 km^-1', 'per kilometer': 'km-1',
+                  'per kilometer per steradian': 'km^-1 sr^-1'}
         # Get the units from the lookup, if they're not in there use the original
         return lookup.get(units, units)
 
@@ -128,6 +129,204 @@ class Caliop_L2_cube(AProduct):
         # The first slice of the last dimension corresponds to the higher (in altitude) element of each
         # sub-Level-2-resolution bin.
         return self._get_calipso_data(sds)[:, :, 0]
+
+    def _get_calipso_data(self, sds):
+        """
+        Reads raw data from an SD instance. Automatically applies the
+        scaling factors and offsets to the data arrays found in Calipso data.
+
+        Returns:
+            A numpy array containing the raw data with missing data is replaced by NaN.
+
+        Arguments:
+            sds        -- The specific sds instance to read
+
+        """
+        from cis.utils import create_masked_array_for_missing_data
+        import numpy as np
+
+        calipso_fill_values = {'Float_32': -9999.0,
+                               # 'Int_8' : 'See SDS description',
+                               'Int_16': -9999,
+                               'Int_32': -9999,
+                               'UInt_8': -127,
+                               # 'UInt_16' : 'See SDS description',
+                               # 'UInt_32' : 'See SDS description',
+                               'ExtinctionQC Fill Value': 32768,
+                               'FeatureFinderQC No Features Found': 32767,
+                               'FeatureFinderQC Fill Value': 65535}
+
+        data = sds.get()
+        attributes = sds.attributes()
+
+        # Missing data. First try 'fillvalue'
+        missing_val = attributes.get('fillvalue', None)
+        if missing_val is None:
+            try:
+                # Now try and lookup the fill value based on the data type
+                missing_val = calipso_fill_values[attributes.get('format', None)]
+            except KeyError:
+                # Last guess
+                missing_val = attributes.get('_FillValue', None)
+
+        if missing_val is not None:
+            data = create_masked_array_for_missing_data(data, missing_val)
+
+        # Now handle valid range mask
+        valid_range = attributes.get('valid_range', None)
+        if valid_range is not None:
+            # Split the range into two numbers of the right type
+            v_range = np.asarray(valid_range.split("..."), dtype=data.dtype)
+            # Some valid_ranges appear to have only one value, so ignore those...
+            if len(v_range) == 2:
+                logging.debug("Masking all values {} > v > {}.".format(*v_range))
+                data = np.ma.masked_outside(data, *v_range)
+            else:
+                logging.warning("Invalid valid_range: {}. Not masking values.".format(valid_range))
+
+        # Offsets and scaling.
+        offset = attributes.get('add_offset', 0)
+        scale_factor = attributes.get('scale_factor', 1)
+        data = self._apply_scaling_factor_CALIPSO(data, scale_factor, offset)
+
+        return data
+
+    def _apply_scaling_factor_CALIPSO(self, data, scale_factor, offset):
+        """
+        Apply scaling factor Calipso data.
+
+        This isn't explicitly documented, but is referred to in the CALIOP docs here:
+        http://www-calipso.larc.nasa.gov/resources/calipso_users_guide/data_summaries/profile_data.php#cloud_layer_fraction
+
+        And also confirmed by email with jason.l.tackett@nasa.gov
+
+        :param data:
+        :param scale_factor:
+        :param offset:
+        :return:
+        """
+        logging.debug("Applying 'science_data = (packed_data / {scale}) + {offset}' "
+                      "transformation to data.".format(scale=scale_factor, offset=offset))
+        return (data / scale_factor) + offset
+
+    def get_file_format(self, filename):
+        return "HDF4/CaliopL2"
+
+
+class Caliop_L3_cube(AProduct):
+    def get_file_signature(self):
+        return [r'CAL_LID_L3.*hdf']
+
+    def get_variable_names(self, filenames, data_type=None):
+        try:
+            from pyhdf.SD import SD
+        except ImportError:
+            raise ImportError("HDF support was not installed, please reinstall with pyhdf to read HDF files.")
+
+        variables = set([])
+
+        # Determine the valid shape for variables
+        sd = SD(filenames[0])
+        datasets = sd.datasets()
+        len_x = datasets['Latitude_Midpoint'][1][1]
+        len_y = datasets['Longitude_Midpoint'][1][1]
+        len_z = datasets['Altitude_Midpoint'][1][1]
+        valid_shape = (len_x, len_y, len_z)
+
+        for filename in filenames:
+            sd = SD(filename)
+            for var_name, var_info in sd.datasets().items():
+                if var_info[1] == valid_shape:
+                    variables.add(var_name)
+
+        return variables
+
+    def create_data_object(self, filenames, variable, index_offset=1):
+        from cis.data_io.hdf_vd import get_data
+        from cis.data_io.hdf_vd import VDS
+        from pyhdf.error import HDF4Error
+        from cis.data_io import hdf_sd
+        from iris.coords import DimCoord, AuxCoord
+        from iris.cube import Cube, CubeList
+        from cis.data_io.gridded_data import GriddedData
+        from cis.time_util import cis_standard_time_unit
+        from datetime import datetime
+        from iris.util import new_axis
+        import numpy as np
+
+        logging.debug("Creating data object for variable " + variable)
+
+        variables = ["Pressure_Mean"]
+        logging.info("Listing coordinates: " + str(variables))
+
+        variables.append(variable)
+
+        # reading data from files
+        sdata = {}
+        for filename in filenames:
+            try:
+                sds_dict = hdf_sd.read(filename, variables)
+            except HDF4Error as e:
+                raise IOError(str(e))
+
+            for var in list(sds_dict.keys()):
+                utils.add_element_to_list_in_dict(sdata, var, sds_dict[var])
+
+        # work out size of data arrays
+        # the coordinate variables will be reshaped to match that.
+        # NOTE: This assumes that all Caliop_L1 files have the same altitudes.
+        #       If this is not the case, then the following line will need to be changed
+        #       to concatenate the data from all the files and not just arbitrarily pick
+        #       the altitudes from the first file.
+        alt_data = self._get_calipso_data(hdf_sd.HDF_SDS(filenames[0], 'Altitude_Midpoint'))[0, :]
+        alt_coord = DimCoord(alt_data, standard_name='altitude', units='km')
+        alt_coord.convert_units('m')
+
+        lat_data = self._get_calipso_data(hdf_sd.HDF_SDS(filenames[0], 'Latitude_Midpoint'))[0, :]
+        lat_coord = DimCoord(lat_data, standard_name='latitude', units='degrees_north')
+
+        lon_data = self._get_calipso_data(hdf_sd.HDF_SDS(filenames[0], 'Longitude_Midpoint'))[0, :]
+        lon_coord = DimCoord(lon_data, standard_name='longitude', units='degrees_east')
+
+        cubes = CubeList()
+        for f in filenames:
+            t = get_data(VDS(f, "Nominal_Year_Month"), True)[0]
+            time_data = cis_standard_time_unit.date2num(datetime(int(t[0:4]), int(t[4:6]), 15))
+            time_coord = AuxCoord(time_data, long_name='Profile_Time', standard_name='time',
+                                  units=cis_standard_time_unit)
+
+            # retrieve data + its metadata
+            var = sdata[variable]
+            metadata = hdf.read_metadata(var, "SD")
+
+            data = self._get_calipso_data(hdf_sd.HDF_SDS(f, variable))
+
+            pres_data = self._get_calipso_data(hdf_sd.HDF_SDS(f, 'Pressure_Mean'))
+            pres_coord = AuxCoord(pres_data, standard_name='air_pressure', units='hPa')
+
+            # pres_coord = new_axis()
+            cube = Cube(data, long_name=metadata.long_name or variable, units=self.clean_units(metadata.units),
+                        dim_coords_and_dims=[(lat_coord, 0), (lon_coord, 1), (alt_coord, 2)],
+                        aux_coords_and_dims=[(time_coord, ())])
+            # Promote the time scalar coord to a length one dimension
+            new_cube = new_axis(cube, 'time')
+            # Then add the (extended) pressure coord so that it is explicitly a function of time
+            new_cube.add_aux_coord(pres_coord[np.newaxis, ...], (0, 1, 2, 3))
+            cubes.append(new_cube)
+
+        # Concatenate the cubes from each file into a single GriddedData object
+        gd = GriddedData.make_from_cube(cubes.concatenate_cube())
+        return gd
+
+    @staticmethod
+    def clean_units(units):
+        lookup = {'NoUnits': '', 'sr^-1km^-1': 'sr^-1 km^-1', 'per kilometer': 'km-1',
+                  'per kilometer per steradian': 'km^-1 sr^-1'}
+        # Get the units from the lookup, if they're not in there use the original
+        return lookup.get(units, units)
+
+    def create_coords(self, filenames, variable=None):
+        raise NotImplemented()
 
     def _get_calipso_data(self, sds):
         """

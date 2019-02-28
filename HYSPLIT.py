@@ -1,3 +1,8 @@
+"""
+Plugin for reading HYSPLIT trajectory files as CIS UngriddedData
+
+(C) Paul Kim, Exeter University
+"""
 import logging
 from cis.data_io.Coord import Coord, CoordList
 from cis.data_io.products.AProduct import AProduct
@@ -15,7 +20,9 @@ hysplit_default_var = ["TRAJECTORY_NO",
                        "AGE",
                        "LAT",
                        "LON",
-                       "ALT"]
+                       "ALT",
+                       "PRESSURE"]
+
 
 def get_file_metadata(fname):
     import linecache
@@ -39,12 +46,13 @@ def get_file_metadata(fname):
     metadata['data_start'] = n_grids + metadata['n_trajectories'] + 3
 
     # Get custom variable names
-    variable_names = linecache.getline(fname, metadata['data_start']).split()[1:]
+    variable_names = linecache.getline(fname, metadata['data_start']).split()[2:]
     metadata['labels'] = hysplit_default_var + variable_names
     metadata['custom_labels'] = variable_names
 
     linecache.clearcache()
     return metadata
+
 
 def load_multiple_hysplit(fnames, variables=None):
     from cis.utils import add_element_to_list_in_dict, concatenate
@@ -68,6 +76,7 @@ def load_multiple_hysplit(fnames, variables=None):
                 hdata[traj] = h_dict[traj]
 
     return hdata
+
 
 def load_hysplit(fname, variables=None):
     import numpy as np
@@ -110,6 +119,7 @@ def load_hysplit(fname, variables=None):
         tdata_dict['LAT'] = trajectory_data[:,hysplit_default_var.index('LAT')]
         tdata_dict['LON'] = trajectory_data[:,hysplit_default_var.index('LON')]
         tdata_dict['ALT'] = trajectory_data[:,hysplit_default_var.index('ALT')]
+        tdata_dict['PRESSURE'] = trajectory_data[:, hysplit_default_var.index('PRESSURE')]
         # TODO any other default variables to add?
 
         # If variables set, fetch only set variables
@@ -133,6 +143,7 @@ def load_hysplit(fname, variables=None):
 
     return data_dict
 
+
 class HYSPLIT(AProduct):
     def get_file_signature(self):
         return [r'.*\.dat']
@@ -148,14 +159,18 @@ class HYSPLIT(AProduct):
 
         coords = CoordList()
 
-        latM = Metadata(name="Latitude", shape=(len(data),), units="degrees_north", range=(-90,90))
-        lonM = Metadata(name="Longitude", shape=(len(data),), units="degrees_east", range=(-180,180))
-        altM = Metadata(name="Altitude", shape=(len(data),), units="meters")
+        latM = Metadata(name="Latitude", shape=(len(data),), units="degrees_north",
+                        range=(-90,90), standard_name='latitude')
+        lonM = Metadata(name="Longitude", shape=(len(data),), units="degrees_east",
+                        range=(-180,180), standard_name='longitude')
+        altM = Metadata(name="Altitude", shape=(len(data),), units="meters", standard_name='altitude')
+        presM = Metadata(name="Pressure", shape=(len(data),), units="hPa", standard_name='air_pressure')
         timeM = Metadata(name="DateTime", standard_name="time", shape=(len(data),), units=str(ct))
 
         coords.append(Coord(data['LAT'], latM))
         coords.append(Coord(data['LON'], lonM))
         coords.append(Coord(data['ALT'], altM))
+        coords.append(Coord(data['PRESSURE'], presM))
         coords.append(Coord(data['DATETIMES'], timeM, "X")) # TODO Why X axis?
 
         return coords

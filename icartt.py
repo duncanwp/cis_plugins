@@ -1,5 +1,4 @@
 from cis.data_io.products.AProduct import AProduct
-from pywork.icartt_utils import _readict
 
 
 class my_product(AProduct):
@@ -27,6 +26,8 @@ class my_product(AProduct):
         return UngriddedCoordinates(coords)
 
     def create_data_object(self, filenames, variable):
+        from pywork.icartt_utils import _readict
+
         from cis.data_io.Coord import Coord, CoordList
         from cis.data_io.ungridded_data import UngriddedData
 

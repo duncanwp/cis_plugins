@@ -10,8 +10,8 @@ class ECHAM_HAM_63_average_pressure(ECHAM_HAM_63):
 
     @staticmethod
     def load_single_file_callback(cube, field, filename):
+        # Don't squeeze, since we need the length-one dims to reconstruct the pressure
         return cube
-
 
     def _add_available_aux_coords(self, cube, filenames):
         import iris
@@ -25,7 +25,14 @@ class ECHAM_HAM_63_average_pressure(ECHAM_HAM_63):
             hybrid_b = _get_cubes(filenames, 'hybrid B coefficient at layer midpoints')
 
             surface_pressure_points = np.empty(cube.shape[1])
-            surface_pressure_points.fill(1013.25)
+            hybrid_a_coord = AuxCoord(points=hybrid_a[0].data, long_name='hybrid A coefficient at layer midpoints', units='Pa')
+            hybrid_b_coord = AuxCoord(points=hybrid_b[0].data, long_name='hybrid B coefficient at layer midpoints', units='1')
+
+            if cube.coords('surface pressure'):
+                surface_pressure = cube.coord('surface pressure')
+            else:
+                surface_pressure = AuxCoord(points=[1013.25], long_name='surface pressure', units='hPa')
+                cube.add_aux_coord(surface_pressure, ())
 
             # First convert the hybrid coefficients to hPa, so that air pressure will be in hPa
             hybrid_a[0].convert_units('hPa')

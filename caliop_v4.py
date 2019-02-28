@@ -1,82 +1,94 @@
-from cis.data_io.products.caliop import Caliop_L2
+from cis.data_io.products.caliop import Caliop_L2, Caliop_L2_NO_PRESSURE, Caliop_L1
 import logging
 from cis.data_io import hdf as hdf
-from cis.data_io.Coord import Coord, CoordList
-from cis.data_io.ungridded_data import Metadata, UngriddedData
-import cis.utils as utils
+from cis.data_io.Coord import Coord
+from cis.data_io.ungridded_data import UngriddedData
 
 
 MIXED_RESOLUTION_VARIABLES = ['Atmospheric_Volume_Description', 'CAD_Score',
                               'Extinction_QC_Flag_1064', 'Extinction_QC_Flag_532']
 
 
-class Caliop_V4(Caliop_L2):
-    def get_file_signature(self):
-        return [r'CAL_LID_L2_05kmAPro.*hdf']
+class Caliop_L1_NO_PRESSURE(Caliop_L1):
+    """
+    Read CALIOP L2 data without the pressure coordinate (which is often masked and causes the data to be flattened)
+    """
+    include_pressure = False
 
-    def _get_mixed_resolution_calipso_data(self, sds):
-        # The first slice of the last dimension corresponds to the higher (in altitude) element of each
-        # sub-Level-2-resolution bin.
-        return self._get_calipso_data(sds)[:, :, 0]
-
-    def _create_one_dimensional_coord_list(self, filenames, index_offset=1):
+    def _get_calipso_data(self, sds):
         """
-        Create a set of coordinates appropriate for a ond-dimensional (column integrated) variable
-        :param filenames:
-        :param int index_offset: For 5km products this will choose the coordinates which represent the start (0),
-        middle (1) and end (2) of the 15 shots making up each column retrieval.
-        :return:
+        Reads raw data from an SD instance. Automatically applies the
+        scaling factors and offsets to the data arrays found in Calipso data.
+
+        Returns:
+            A numpy array containing the raw data with missing data is replaced by NaN.
+
+        Arguments:
+            sds        -- The specific sds instance to read
+
         """
-        from pyhdf.error import HDF4Error
-        from cis.data_io import hdf_sd
-        import datetime as dt
-        from cis.time_util import convert_sec_since_to_std_time, cis_standard_time_unit
+        from cis.utils import create_masked_array_for_missing_data
+        import numpy as np
 
-        variables = ['Latitude', 'Longitude', "Profile_Time"]
-        logging.info("Listing coordinates: " + str(variables))
+        calipso_fill_values = {'Float_32': -9999.0,
+                               # 'Int_8' : 'See SDS description',
+                               'Int_16': -9999,
+                               'Int_32': -9999,
+                               'UInt_8': -127,
+                               # 'UInt_16' : 'See SDS description',
+                               # 'UInt_32' : 'See SDS description',
+                               'ExtinctionQC Fill Value': 32768,
+                               'FeatureFinderQC No Features Found': 32767,
+                               'FeatureFinderQC Fill Value': 65535}
 
-        # reading data from files
-        sdata = {}
-        for filename in filenames:
+        data = sds.get()
+        attributes = sds.attributes()
+
+        # Missing data. First try 'fillvalue'
+        missing_val = attributes.get('fillvalue', None)
+        if missing_val is None:
             try:
-                sds_dict = hdf_sd.read(filename, variables)
-            except HDF4Error as e:
-                raise IOError(str(e))
+                # Now try and lookup the fill value based on the data type
+                missing_val = calipso_fill_values[attributes.get('format', None)]
+            except KeyError:
+                # Last guess
+                missing_val = attributes.get('_FillValue', None)
 
-            for var in list(sds_dict.keys()):
-                utils.add_element_to_list_in_dict(sdata, var, sds_dict[var])
+        if missing_val is not None:
+            data = create_masked_array_for_missing_data(data, float(missing_val))
 
-        # latitude
-        lat_data = hdf.read_data(sdata['Latitude'], self._get_calipso_data)[:, index_offset]
-        lat_metadata = hdf.read_metadata(sdata['Latitude'], "SD")
-        lat_coord = Coord(lat_data, lat_metadata, 'Y')
+        # Now handle valid range mask
+        valid_range = attributes.get('valid_range', None)
+        if valid_range is not None:
+            # Split the range into two numbers of the right type (removing commas in the floats...)
+            # TODO This check needs adding back to the CIS plugin
+            v_range = np.asarray(valid_range.replace(',','').split("..."))
+            # Some valid_ranges appear to have only one value, so ignore those...
+            # Also check that we can safely cast the range values to their target type
+            if (len(v_range) == 2) and np.can_cast(v_range, data.dtype):
+                v_range = v_range.astype(data.dtype)
+                logging.debug("Masking all values {} > v > {}.".format(*v_range))
+                data = np.ma.masked_outside(data, *v_range)
+            else:
+                logging.warning("Invalid valid_range: {}. Not masking values.".format(valid_range))
 
-        # longitude
-        lon = sdata['Longitude']
-        lon_data = hdf.read_data(lon, self._get_calipso_data)[:, index_offset]
-        lon_metadata = hdf.read_metadata(lon, "SD")
-        lon_coord = Coord(lon_data, lon_metadata, 'X')
+        # Offsets and scaling.
+        offset = attributes.get('add_offset', 0)
+        scale_factor = attributes.get('scale_factor', 1)
+        data = self._apply_scaling_factor_CALIPSO(data, scale_factor, offset)
 
-        # profile time, x
-        time = sdata['Profile_Time']
-        time_data = hdf.read_data(time, self._get_calipso_data)[:, index_offset]
-        time_data = convert_sec_since_to_std_time(time_data, dt.datetime(1993, 1, 1, 0, 0, 0))
-        time_coord = Coord(time_data, Metadata(name='Profile_Time', standard_name='time', shape=time_data.shape,
-                                               units=cis_standard_time_unit), "T")
+        return data
 
-        # create the object containing all coordinates
-        coords = CoordList()
-        coords.append(lat_coord)
-        coords.append(lon_coord)
-        coords.append(time_coord)
 
-        return coords
+
+class Caliop_V4_QC_directly_creating_vars(Caliop_L2_NO_PRESSURE):
 
     def create_data_object(self, filenames, variable):
-        logging.debug("Creating data object for variable " + variable)
+        from pywork.CALIOP_utils import mask_data
 
+        logging.debug("Creating *QC'd* data object for variable " + variable)
         # reading of variables
-        sdata, vdata = hdf.read(filenames, variable)
+        sdata, vdata = hdf.read(filenames, [variable, "Pressure", "Extinction_QC_Flag_532", "CAD_Score"])
 
         # retrieve data + its metadata
         var = sdata[variable]
@@ -96,20 +108,112 @@ class Caliop_V4(Caliop_L2):
         else:
             callback = self._get_calipso_data
 
-        return UngriddedData(var, metadata, coords, callback)
+        var_data = hdf.read_data(sdata[variable], callback)
+
+        extinction_qc = hdf.read_data(sdata["Extinction_QC_Flag_532"], self._get_mixed_resolution_calipso_data)
+        cad_score = hdf.read_data(sdata["CAD_Score"], self._get_mixed_resolution_calipso_data)
+
+        qcd_var_data, = mask_data(var_data, cad_score, extinction_qc)
+
+        # reading coordinates
+        if variable.startswith('Column'):
+            coords = self._create_one_dimensional_coord_list(filenames, index_offset=1)
+        else:
+            coords = self._create_coord_list(filenames, index_offset=1)
+
+            pres_data = hdf.read_data(sdata['Pressure'], self._get_calipso_data)
+            pres_metadata = hdf.read_metadata(sdata['Pressure'], "SD")
+            # Fix badly formatted units which aren't CF compliant and will break if they are aggregated
+            if str(pres_metadata.units) == "hPA":
+                pres_metadata.units = "hPa"
+
+            qcd_pres_data = mask_data(pres_data, cad_score, extinction_qc)
+            pres_coord = Coord(qcd_pres_data, pres_metadata, 'P')
+            coords.append(pres_coord)
+
+        return UngriddedData(qcd_var_data, metadata, coords)
 
 
-class Caliop_V4_NO_PRESSURE(Caliop_V4):
+class Caliop_V4_QC(Caliop_L2):
+
+    def create_data_object(self, filenames, variable):
+        from pywork.CALIOP_utils import mask_data
+
+        # Read all the vars without pressure
+        var_data = super().create_data_object(filenames, variable)
+        extinction_qc = super().create_data_object(filenames, "Extinction_QC_Flag_532")
+        cad_score = super().create_data_object(filenames, "CAD_Score")
+
+        qcd_var_data, = mask_data([var_data], cad_score, extinction_qc)
+
+        if not variable.startswith('Column'):
+            # Read pressure separately, as it's own variable
+            pressure = super().create_data_object(filenames, "Pressure")
+
+            qcd_pres, = mask_data([pressure], cad_score, extinction_qc)
+
+            qcd_pres_coord = Coord(qcd_pres.data, qcd_pres.metadata, 'P')
+            # Fix badly formatted units which aren't CF compliant and will break if they are aggregated
+            if str(qcd_pres_coord.units) == "hPA":
+                qcd_pres_coord.units = "hPa"
+
+            qcd_var_data._coords.append(qcd_pres_coord)
+            qcd_var_data._post_process()
+
+        return qcd_var_data
+
+
+class Caliop_V4_QC_NO_PRESSURE(Caliop_L2_NO_PRESSURE):
+
+    def create_data_object(self, filenames, variable):
+        from pywork.CALIOP_utils import mask_data
+
+        # Read all the vars without pressure
+        var_data = super().create_data_object(filenames, variable)
+        extinction_qc = super().create_data_object(filenames, "Extinction_QC_Flag_532")
+        cad_score = super().create_data_object(filenames, "CAD_Score")
+
+        qcd_var_data, = mask_data([var_data], cad_score, extinction_qc)
+
+        return qcd_var_data
+
+
+class Caliop_L15(Caliop_L1_NO_PRESSURE):
+    def get_file_signature(self):
+        return [r'CAL_LID_L1.*hdf']
+
+    def create_data_object(self, filenames, variable):
+        logging.debug("Creating data object for variable " + variable)
+
+        # reading coordinates
+        # the variable here is needed to work out whether to apply interpolation to the lat/lon data or not
+        coords = self._create_coord_list(filenames)
+
+        # reading of variables
+        sdata, vdata = hdf.read(filenames, variable)
+
+        # retrieve data + its metadata
+        var = sdata[variable]
+        metadata = hdf.read_metadata(var, "SD")
+
+        return UngriddedData(var, metadata, coords, self._get_calipso_data)
+
+    def get_file_format(self, filename):
+        return "HDF4/CaliopL1"
 
     def _create_coord_list(self, filenames, index_offset=0):
-        from cis.data_io.hdf_vd import get_data
+        import logging
+        from cis.data_io import hdf as hdf
+        from cis.data_io.Coord import Coord, CoordList
+        from cis.data_io.ungridded_data import Metadata
+        import cis.utils as utils
         from cis.data_io.hdf_vd import VDS
         from pyhdf.error import HDF4Error
         from cis.data_io import hdf_sd
         import datetime as dt
         from cis.time_util import convert_sec_since_to_std_time, cis_standard_time_unit
 
-        variables = ['Latitude', 'Longitude', "Profile_Time"]
+        variables = ['Latitude', 'Longitude', "Profile_Time", "Pressure"]
         logging.info("Listing coordinates: " + str(variables))
 
         # reading data from files
@@ -146,6 +250,16 @@ class Caliop_V4_NO_PRESSURE(Caliop_V4):
         alt_metadata = Metadata(name=alt_name, standard_name=alt_name, shape=new_shape)
         alt_coord = Coord(alt_data, alt_metadata)
 
+        # pressure
+        if self.include_pressure:
+            pres_data = hdf.read_data(sdata['Pressure'], self._get_calipso_data)
+            pres_metadata = hdf.read_metadata(sdata['Pressure'], "SD")
+            # Fix badly formatted units which aren't CF compliant and will break if they are aggregated
+            if str(pres_metadata.units) == "hPA":
+                pres_metadata.units = "hPa"
+            pres_metadata.shape = new_shape
+            pres_coord = Coord(pres_data, pres_metadata, 'P')
+
         # latitude
         lat_data = utils.expand_1d_to_2d_array(lat_data[:, index_offset], len_x, axis=1)
         lat_metadata = hdf.read_metadata(sdata['Latitude'], "SD")
@@ -174,96 +288,134 @@ class Caliop_V4_NO_PRESSURE(Caliop_V4):
         coords.append(lon_coord)
         coords.append(time_coord)
         coords.append(alt_coord)
+        if self.include_pressure and (pres_data.shape == alt_data.shape):
+            # For MODIS L1 this may is not be true, so skips the air pressure reading. If required for MODIS L1 then
+            # some kind of interpolation of the air pressure would be required, as it is on a different (smaller) grid
+            # than for the Lidar_Data_Altitudes.
+            coords.append(pres_coord)
 
         return coords
 
+    def _get_calipso_data(self, sds):
+        """
+        Reads raw data from an SD instance. Automatically applies the
+        scaling factors and offsets to the data arrays found in Calipso data.
 
-class Caliop_V4_QC_directly_creating_vars(Caliop_V4_NO_PRESSURE):
+        Returns:
+            A numpy array containing the raw data with missing data is replaced by NaN.
 
-    def create_data_object(self, filenames, variable):
-        from pywork.CALIOP_utils import mask_data
+        Arguments:
+            sds        -- The specific sds instance to read
 
-        logging.debug("Creating *QC'd* data object for variable " + variable)
+        """
+        from cis.utils import create_masked_array_for_missing_data
+        import numpy as np
 
-        # reading of variables
-        sdata, vdata = hdf.read(filenames, [variable, "Pressure", "Extinction_QC_Flag_532", "CAD_Score"])
+        calipso_fill_values = {'Float_32': -9999.0,
+                               # 'Int_8' : 'See SDS description',
+                               'Int_16': -9999,
+                               'Int_32': -9999,
+                               'UInt_8': -127,
+                               # 'UInt_16' : 'See SDS description',
+                               # 'UInt_32' : 'See SDS description',
+                               'ExtinctionQC Fill Value': 32768,
+                               'FeatureFinderQC No Features Found': 32767,
+                               'FeatureFinderQC Fill Value': 65535}
 
-        # retrieve data + its metadata
-        var = sdata[variable]
-        metadata = hdf.read_metadata(var, "SD")
+        data = sds.get()
+        attributes = sds.attributes()
 
-        if variable in MIXED_RESOLUTION_VARIABLES:
-            logging.warning("Using Level 2 resolution profile for mixed resolution variable {}. See CALIPSO "
-                            "documentation for more details".format(variable))
-            callback = self._get_mixed_resolution_calipso_data
-        else:
-            callback = self._get_calipso_data
+        # Missing data. First try 'fillvalue'
+        missing_val = attributes.get('fillvalue', None)
+        if missing_val is None:
+            try:
+                # Now try and lookup the fill value based on the data type
+                missing_val = calipso_fill_values[attributes.get('format', None)]
+            except KeyError:
+                # Last guess
+                missing_val = attributes.get('_FillValue', None)
 
-        var_data = hdf.read_data(sdata[variable], callback)
+        if missing_val is not None:
+            data = create_masked_array_for_missing_data(data, float(missing_val))
 
-        extinction_qc = hdf.read_data(sdata["Extinction_QC_Flag_532"], self._get_mixed_resolution_calipso_data)
-        cad_score = hdf.read_data(sdata["CAD_Score"], self._get_mixed_resolution_calipso_data)
+        # Now handle valid range mask
+        valid_range = attributes.get('valid_range', None)
+        if valid_range is not None:
+            # Split the range into two numbers of the right type (removing commas in the floats...)
+            v_range = np.asarray(valid_range.replace(',','').split("..."), dtype=data.dtype)
+            # Some valid_ranges appear to have only one value, so ignore those...
+            if (len(v_range) == 2) and v_range[0] < v_range[1]:
+                logging.debug("Masking all values {} > v > {}.".format(*v_range))
+                data = np.ma.masked_outside(data, *v_range)
+            else:
+                logging.warning("Invalid valid_range: {}. Not masking values.".format(valid_range))
 
-        qcd_var_data, = mask_data(var_data, cad_score, extinction_qc)
+        # Offsets and scaling.
+        offset = attributes.get('add_offset', 0)
+        scale_factor = attributes.get('scale_factor', 1)
+        data = self._apply_scaling_factor_CALIPSO(data, scale_factor, offset)
 
-        # reading coordinates
-        if variable.startswith('Column'):
-            coords = self._create_one_dimensional_coord_list(filenames, index_offset=1)
-        else:
-            coords = self._create_coord_list(filenames, index_offset=1)
-
-            pres_data = hdf.read_data(sdata['Pressure'], self._get_calipso_data)
-            pres_metadata = hdf.read_metadata(sdata['Pressure'], "SD")
-            # Fix badly formatted units which aren't CF compliant and will break if they are aggregated
-            if str(pres_metadata.units) == "hPA":
-                pres_metadata.units = "hPa"
-
-            qcd_pres_data = mask_data(pres_data, cad_score, extinction_qc)
-            pres_coord = Coord(qcd_pres_data, pres_metadata, 'P')
-            coords.append(pres_coord)
-
-        return UngriddedData(qcd_var_data, metadata, coords)
-
-
-class Caliop_V4_QC(Caliop_V4_NO_PRESSURE):
-
-    def create_data_object(self, filenames, variable):
-        from pywork.CALIOP_utils import mask_data
-
-        # Read all the vars without pressure
-        var_data = super().create_data_object(filenames, variable)
-        extinction_qc = super().create_data_object(filenames, "Extinction_QC_Flag_532")
-        cad_score = super().create_data_object(filenames, "CAD_Score")
-
-        qcd_var_data, = mask_data([var_data], cad_score, extinction_qc)
-
-        if not variable.startswith('Column'):
-            # Read pressure separately, as it's own variable
-            pressure = super().create_data_object(filenames, "Pressure")
-
-            qcd_pres, = mask_data([pressure], cad_score, extinction_qc)
-
-            qcd_pres_coord = Coord(qcd_pres.data, qcd_pres.metadata, 'P')
-            # Fix badly formatted units which aren't CF compliant and will break if they are aggregated
-            if str(qcd_pres_coord.units) == "hPA":
-                qcd_pres_coord.units = "hPa"
-
-            qcd_var_data._coords.append(qcd_pres_coord)
-            qcd_var_data._post_process()
-
-        return qcd_var_data
+        return data
 
 
-class Caliop_V4_QC_NO_PRESSURE(Caliop_V4_NO_PRESSURE):
+def get_data(vds, first_record=False, missing_values=None):
+    """
+    Actually read the data from the VDS handle. We shouldn't need to check for HDF being installed here because the
+    VDS object which is being passed to us can only have come from pyhdf.
 
-    def create_data_object(self, filenames, variable):
-        from pywork.CALIOP_utils import mask_data
+    :param vds:
+    :param first_record:
+    :param missing_values:
+    :return:
+    """
+    import numpy as np
+    from pyhdf.HDF import HDF, HDF4Error
+    from cis.utils import create_masked_array_for_missing_values
 
-        # Read all the vars without pressure
-        var_data = super().create_data_object(filenames, variable)
-        extinction_qc = super().create_data_object(filenames, "Extinction_QC_Flag_532")
-        cad_score = super().create_data_object(filenames, "CAD_Score")
+    # get file and variable reference from tuple
+    filename = vds.filename
+    variable = vds.variable
 
-        qcd_var_data, = mask_data([var_data], cad_score, extinction_qc)
+    try:
+        datafile = HDF(filename)
+    except HDF4Error as e:
+        raise IOError(e)
 
-        return qcd_var_data
+    vs = datafile.vstart()
+
+    if first_record:
+        # FIXME - This is the only bit that is actually different to the baseline
+        vd = vs.attach('metadata')
+        vd.setfields(variable)
+        data = vd.read()
+    else:
+        # get data for that variable
+        vd = vs.attach(variable)
+        data = vd.read(nRec=vd.inquire()[0])
+
+    # create numpy array from data
+    data = np.array(data).flatten()
+
+    # dealing with missing data
+    if missing_values is None:
+        v = _get_attribute_value(vd, 'missing')
+        v = float(v) if v is not None else None
+        missing_values = [v]
+
+    data = create_masked_array_for_missing_values(data, missing_values)
+
+    # detach and close
+    vd.detach()
+    vs.end()
+    datafile.close()
+
+    return data
+
+def _get_attribute_value(vd, name, default=None):
+    val = vd.attrinfo().get(name, None)
+    # if the attribute is not present
+    if val is None:
+        return default
+    else:
+        # attrinfo() returns a tuple in which the value of interest is the 3rd item, hence the '[2]'
+        return val[2]

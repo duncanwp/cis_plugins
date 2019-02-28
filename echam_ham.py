@@ -6,6 +6,7 @@ class ECHAM_HAM(ECHAM_HAM_Pascals):
     """
         Plugin for reading ECHAM-HAM NetCDF output files. **Air pressure is converted to hPa**
     """
+    priority = 100
 
     def _add_available_aux_coords(self, cube, filenames):
         from iris.aux_factory import HybridPressureFactory

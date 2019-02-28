@@ -7,48 +7,6 @@ class GASSP_variable_name_selector(NCAR_NetCDF_RAF_variable_name_selector):
     # Standard static air pressure variable name
     PRESSURE_VAR_NAME = 'AIR_PRESSURE'
 
-    @staticmethod
-    def _parse_station_lat_lon(lat_lon_string):
-        """
-        Parse a station's latitude or longitude string. Will try and read it directly as a float, otherwise will try and
-         read the first white-space separated part of the string (e.g. '80 degrees north' -> float(80)).
-        :param lat_lon_string:
-        :return:
-        """
-        from cis.exceptions import InvalidVariableError
-        try:
-            return float(lat_lon_string)
-        except ValueError:
-            try:
-                return float(lat_lon_string.split()[0])
-            except ValueError:
-                raise InvalidVariableError("Couldn't parse station attribute '{}'".format(lat_lon_string))
-
-    def _stationary_setup(self):
-        """
-        Set up object when latitude and longitude are fixed
-        """
-        from cis.exceptions import InvalidVariableError
-        if self.STATION_LATITUDE_NAME.lower() not in self._attributes[0]:
-            raise InvalidVariableError("No attributes indicating latitude, expecting '{}'"
-                                       .format(self.STATION_LATITUDE_NAME))
-        # We need a bunch of different latitudes for different files
-        self.station_latitude = [self._parse_station_lat_lon(attr[self.STATION_LATITUDE_NAME.lower()])
-                                 for attr in self._attributes]
-
-        if self.STATION_LONGITUDE_NAME.lower() not in self._attributes[0]:
-            raise InvalidVariableError("No attributes indicating longitude, expecting '{}'"
-                                       .format(self.STATION_LONGITUDE_NAME))
-        self.station_longitude = [self._parse_station_lat_lon(attr[self.STATION_LONGITUDE_NAME.lower()])
-                                  for attr in self._attributes]
-        self.station = True
-
-        if self.STATION_ALTITUDE_NAME.lower() in self._attributes[0]:
-            self.altitude = [self._parse_station_altitude(attr[self.STATION_ALTITUDE_NAME.lower()])
-                             for attr in self._attributes]
-        else:
-            self.altitude = [self.DEFAULT_ALTITUDE for attr in self._attributes]
-
 
 class GASSP(NCAR_NetCDF_RAF):
 
@@ -88,14 +46,14 @@ class GASSP(NCAR_NetCDF_RAF):
                 # Work out the associated variable name for this column
                 ccn_flag_var = "COL{}_FLAG".format(variable[-1])
                 # Read in the flags
-                flags = concatenate(read_many_files_individually(filenames, ccn_flag_var)[ccn_flag_var])
+                flags = concatenate([get_data(v) for v in read_many_files_individually(filenames, ccn_flag_var)[
+                    ccn_flag_var]])
                 # 0 and 1 are both OK
-                mask = flags[:] > 1
+                mask = flags > 1
                 # If a variable was supplied then coords must be an ungridded data object, apply the mask to it
-                var_data = apply_mask_to_numpy_array(concatenate(var_data), mask)
+                var_data = apply_mask_to_numpy_array(concatenate([get_data(v) for v in var_data]), mask)
 
             return UngriddedData(var_data, get_metadata(data_variables[variable][0]), all_coords)
-
 
     def _create_coord(self, coord_axis, data_variable_name, data_variables, standard_name):
         """
@@ -106,7 +64,7 @@ class GASSP(NCAR_NetCDF_RAF):
         :param standard_name: the standard name it should have
         :return: a coords object
         """
-        from cis.data_io.netcdf import get_metadata, get_data
+        from cis.data_io.netcdf import get_metadata
         from cis.data_io.Coord import Coord
         from cf_units import Unit
         import logging
@@ -140,3 +98,22 @@ class GASSP(NCAR_NetCDF_RAF):
             coordinate_data_objects.append(Coord(data, m, coord_axis))
 
         return Coord.from_many_coordinates(coordinate_data_objects)
+
+
+def get_data(var):
+    # FIXME: THIS IS COPIED FROM CIS 1.6, and is a nasty hack needed because of crap data
+    from cis.data_io.netcdf import apply_offset_and_scaling, get_data
+    import numpy as np
+    import logging
+
+    var.set_auto_mask(False)
+
+    data = get_data(var)
+
+    # If the data isn't in the native endianess then flip it (in case it ends up in Pandas)
+    # See https://docs.scipy.org/doc/numpy-1.10.1/user/basics.byteswapping.html#data-and-dtype-endianness-match-swap-data-and-dtype
+    #  and https://stackoverflow.com/questions/30283836/creating-pandas-dataframe-from-numpy-array-leads-to-strange-errors
+    if data.dtype.byteorder != '=':
+        data = data.byteswap().newbyteorder()
+
+    return data
