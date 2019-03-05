@@ -87,13 +87,19 @@ class Caliop_V4_QC_directly_creating_vars(Caliop_L2_NO_PRESSURE):
         from pywork.CALIOP_utils import mask_data
 
         logging.debug("Creating *QC'd* data object for variable " + variable)
-
         # reading of variables
         sdata, vdata = hdf.read(filenames, [variable, "Pressure", "Extinction_QC_Flag_532", "CAD_Score"])
 
         # retrieve data + its metadata
         var = sdata[variable]
         metadata = hdf.read_metadata(var, "SD")
+
+        # reading coordinates
+        # See if the variable is one dimensional (check the length of shape, neglecting length 1 dimensions)
+        if len([l for l in metadata.shape if l > 1]) == 1:
+            coords = self._create_one_dimensional_coord_list(filenames, index_offset=1)
+        else:
+            coords = self._create_coord_list(filenames, index_offset=1)
 
         if variable in MIXED_RESOLUTION_VARIABLES:
             logging.warning("Using Level 2 resolution profile for mixed resolution variable {}. See CALIPSO "
