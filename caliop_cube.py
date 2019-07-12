@@ -304,15 +304,27 @@ class Caliop_L3_cube(AProduct):
             pres_data = self._get_calipso_data(hdf_sd.HDF_SDS(f, 'Pressure_Mean'))
             pres_coord = AuxCoord(pres_data, standard_name='air_pressure', units='hPa')
 
-            # pres_coord = new_axis()
-            cube = Cube(data, long_name=metadata.long_name or variable, units=self.clean_units(metadata.units),
-                        dim_coords_and_dims=[(lat_coord, 0), (lon_coord, 1), (alt_coord, 2)],
-                        aux_coords_and_dims=[(time_coord, ())])
-            # Promote the time scalar coord to a length one dimension
-            new_cube = new_axis(cube, 'time')
-            # Then add the (extended) pressure coord so that it is explicitly a function of time
-            new_cube.add_aux_coord(pres_coord[np.newaxis, ...], (0, 1, 2, 3))
-            cubes.append(new_cube)
+            if data.ndim == 2:
+                # pres_coord = new_axis()
+                cube = Cube(data, long_name=metadata.long_name or variable, units=self.clean_units(metadata.units),
+                            dim_coords_and_dims=[(lat_coord, 0), (lon_coord, 1)],
+                            aux_coords_and_dims=[(time_coord, ())])
+                # Promote the time scalar coord to a length one dimension
+                new_cube = new_axis(cube, 'time')
+                cubes.append(new_cube)
+            elif data.ndim == 3:
+                # pres_coord = new_axis()
+                cube = Cube(data, long_name=metadata.long_name or variable, units=self.clean_units(metadata.units),
+                            dim_coords_and_dims=[(lat_coord, 0), (lon_coord, 1), (alt_coord, 2)],
+                            aux_coords_and_dims=[(time_coord, ())])
+                # Promote the time scalar coord to a length one dimension
+                new_cube = new_axis(cube, 'time')
+                # Then add the (extended) pressure coord so that it is explicitly a function of time
+                new_cube.add_aux_coord(pres_coord[np.newaxis, ...], (0, 1, 2, 3))
+                cubes.append(new_cube)
+            else:
+                raise ValueError("Unexpected number of dimensions for CALIOP data: {}".format(data.ndim))
+
 
         # Concatenate the cubes from each file into a single GriddedData object
         gd = GriddedData.make_from_cube(cubes.concatenate_cube())
