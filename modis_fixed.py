@@ -61,17 +61,17 @@ class MOD06_HACK(MODIS_L2):
 
         sdata, vdata = hdf.read(filenames, variables)
 
-        apply_interpolation = False
+        self.apply_interpolation = False
         if variable is not None:
             scale = self.__get_data_scale(filenames[0], variable)
-            apply_interpolation = True if scale is "1km" else False
+            self.apply_interpolation = scale == "1km"
 
         lat = sdata['Latitude']
         lat_data = hdf.read_data(lat, _get_MODIS_SDS_data)
         lon = sdata['Longitude']
         lon_data = hdf.read_data(lon, _get_MODIS_SDS_data)
 
-        if apply_interpolation:
+        if self.apply_interpolation:
             lon_data, lat_data = modis5kmto1km(lon_data[:], lat_data[:])
 
         lat_metadata = hdf.read_metadata(lat, "SD")
@@ -85,7 +85,8 @@ class MOD06_HACK(MODIS_L2):
         # Ensure the standard name is set
         time_metadata.standard_name = 'time'
         time_data = hdf.read_data(time, _get_MODIS_SDS_data)
-        time_data = np.repeat(np.repeat(time_data, 5, axis=0), 5, axis=1)
+        if self.apply_interpolation: 
+            time_data = np.repeat(np.repeat(time_data, 5, axis=0), 5, axis=1)
         time_coord = Coord(time_data, time_metadata, "T")
         time_coord.convert_TAI_time_to_std_time(dt.datetime(1993, 1, 1, 0, 0, 0))
 
@@ -107,6 +108,8 @@ class MOD06_HACK(MODIS_L2):
 
         # cut off the edges of the data...
         # TODO CHECK THIS IS ACTUALLY VALID BEFORE PUBLISHING ANYTHING WITH THIS
-        d = hdf.read_data(var, _get_MODIS_SDS_data)[:, 2:-2]
+        d = hdf.read_data(var, _get_MODIS_SDS_data)
+        if self.apply_interpolation:
+            d=d[:, 2:-2]
 
         return UngriddedData(d, metadata, coords, _get_MODIS_SDS_data)
