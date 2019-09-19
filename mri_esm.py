@@ -56,15 +56,16 @@ class MRI_ESM(NetCDF_Gridded):
     def _add_available_aux_coords(self, cube, filenames):
         from iris.aux_factory import HybridPressureFactory
         from iris.coords import AuxCoord
+        from cis.data_io.netcdf import read
 
-        ps_filenames = [f.replace('concbc', 'ps_TL95L80_192x48NH') for f in filenames]
+        ps_filenames = [f.replace('concbc', 'ps_TL95L80_192x48NH_3hr') for f in filenames]
 
         # These will be the same for all files
-        hybrid_a = _get_cubes(ps_filenames, 'vertical coordinate formula term: a(k)')
-        hybrid_b = _get_cubes(ps_filenames, 'vertical coordinate formula term: b(k)')
+        hybrid_a = read(ps_filenames[0], 'a')
+        hybrid_b = read(ps_filenames[0], 'b')
 
-        hybrid_a_coord = AuxCoord(points=hybrid_a[0].data, long_name=hybrid_a[0].long_name, units='Pa')
-        hybrid_b_coord = AuxCoord(points=hybrid_b[0].data, long_name=hybrid_b[0].long_name, units='1')
+        hybrid_a_coord = AuxCoord(points=hybrid_a[:], long_name='vertical coordinate formula term: a(k)', units='Pa')
+        hybrid_b_coord = AuxCoord(points=hybrid_b[:], long_name='vertical coordinate formula term: b(k)', units='1')
 
         # This needs to be from each file and then merged
         surface_pressure_cube = _get_cubes(ps_filenames, 'surface_air_pressure',
