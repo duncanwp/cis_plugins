@@ -94,8 +94,10 @@ class ECHAM_HAM_63(ECHAM_HAM_Pascals):
             hybrid_a = _get_cubes(filenames, 'hybrid A coefficient at layer midpoints')
             hybrid_b = _get_cubes(filenames, 'hybrid B coefficient at layer midpoints')
 
-            hybrid_a_coord = AuxCoord(points=hybrid_a[0].data, long_name='hybrid A coefficient at layer midpoints', units='Pa')
-            hybrid_b_coord = AuxCoord(points=hybrid_b[0].data, long_name='hybrid B coefficient at layer midpoints', units='1')
+            hybrid_a_coord = AuxCoord(points=hybrid_a[0].data, 
+                    long_name='hybrid A coefficient at layer midpoints', units='Pa', var_name='hyam')
+            hybrid_b_coord = AuxCoord(points=hybrid_b[0].data, 
+                    long_name='hybrid B coefficient at layer midpoints', units='1', var_name='hybm')
 
             if cube.coords('surface pressure'):
                 surface_pressure = cube.coord('surface pressure')
@@ -104,6 +106,8 @@ class ECHAM_HAM_63(ECHAM_HAM_Pascals):
                     # If there isn't a surface pressure coordinate we can try and pull out the lowest pressure level
                     surface_pressure_cubes = _get_cubes(filenames, 'atmospheric pressure at interfaces',
                                                         callback=self.load_multiple_files_callback)
+                    if not surface_pressure_cubes:
+                        raise ValueError()
                     surface_pressure_cube = surface_pressure_cubes.concatenate_cube()[:,-1,:,:]
                     surface_pressure = AuxCoord(points=surface_pressure_cube.data, long_name='surface pressure', units='Pa')
                     cube.add_aux_coord(surface_pressure, (0, 2, 3))
