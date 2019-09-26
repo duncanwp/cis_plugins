@@ -5,7 +5,7 @@ from cis.data_io.products import AProduct
 import logging
 
 
-class icartt_netcdf(AProduct):
+class CARIBIC(AProduct):
 
     def get_file_signature(self):
         return [r'.*\.nc']
@@ -23,15 +23,15 @@ class icartt_netcdf(AProduct):
         def get_axis_std_name(var):
             axis=None
             lvar = var.lower()
-            if lvar == 'longitude':
+            if lvar == 'poslong' or lvar == 'longitude':
                 axis = 'x', 'longitude'
-            if lvar == 'latitude':
+            if lvar == 'poslat' or lvar == 'latitude':
                 axis = 'y', 'latitude'
-            if lvar == 'G_ALT' or lvar == 'altitude' or lvar == 'pressure_altitude':
+            if lvar == 'g_alt' or lvar == 'altitude':
                 axis = 'z', 'altitude'
             if lvar == 'time':
                 axis = 't', 'time'
-            if lvar == 'p' or lvar == 'pressure' or lvar == 'static_pressure':
+            if lvar == 'p' or lvar == 'pstatic' or lvar == 'pressure':
                 axis = 'p', 'air_pressure'
             return axis
 
@@ -85,11 +85,11 @@ class icartt_netcdf(AProduct):
         atts = get_netcdf_file_attributes(filename)
         errors = None
         try:
-            history = atts['history']
+            title = atts['title']
         except KeyError as ex:
-            errors = ['No history attribute found in {}'.format(filename)]
+            errors = ['No title attribute found in {}'.format(filename)]
         else:
-            if "Assembled using assemble and _readict" not in history:
-                errors = ['History ({}) does not appear to match ICARTT output in {}'.format(history, filename)]
+            if not title.startswith("CARIBIC"):
+                errors = ['Title ({}) does not appear to match CARIBIC in {}'.format(title, filename)]
         return errors
 

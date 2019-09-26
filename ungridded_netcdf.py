@@ -1,11 +1,11 @@
 """
-A plugin for reading converted ICARTT files
+A plugin for reading ungridded (and CF-uncompliant) NetCDF files
 """
 from cis.data_io.products import AProduct
 import logging
 
 
-class icartt_netcdf(AProduct):
+class ungridded_netcdf(AProduct):
 
     def get_file_signature(self):
         return [r'.*\.nc']
@@ -23,9 +23,9 @@ class icartt_netcdf(AProduct):
         def get_axis_std_name(var):
             axis=None
             lvar = var.lower()
-            if lvar == 'longitude':
+            if lvar.startswith('lon'):
                 axis = 'x', 'longitude'
-            if lvar == 'latitude':
+            if lvar.startswith('lat'):
                 axis = 'y', 'latitude'
             if lvar == 'G_ALT' or lvar == 'altitude' or lvar == 'pressure_altitude':
                 axis = 'z', 'altitude'
@@ -55,12 +55,13 @@ class icartt_netcdf(AProduct):
                 meta = get_metadata(var_data[name][0])
                 if meta.standard_name is None:
                     meta.standard_name = axis_std_name[1]
-                coords.append(Coord(var_data[name], meta, axis=axis_std_name[0]))
+                coord = Coord(var_data[name], meta, axis=axis_std_name[0])
+                if meta.standard_name == 'time':
+                    # Converting units to CIS std time
+                    coord.convert_to_std_time()
+                coords.append(coord)
             except InvalidVariableError:
                 pass
-
-        # Note - We don't need to convert this time coord as it should have been written in our
-        #  'standard' time unit
 
         if usr_variable is None:
             res = UngriddedCoordinates(coords)
@@ -71,25 +72,3 @@ class icartt_netcdf(AProduct):
 
     def create_data_object(self, filenames, variable):
         return self.create_coords(filenames, variable)
-
-    def get_file_format(self, filename):
-        return "NetCDF/ICARTT"
-
-    def get_file_type_error(self, filename):
-        """
-        Test that the file is of the correct signature
-        :param filename: the file name for the file
-        :return: list fo errors or None
-        """
-        from cis.data_io.netcdf import get_netcdf_file_attributes
-        atts = get_netcdf_file_attributes(filename)
-        errors = None
-        try:
-            history = atts['history']
-        except KeyError as ex:
-            errors = ['No history attribute found in {}'.format(filename)]
-        else:
-            if "Assembled using assemble and _readict" not in history:
-                errors = ['History ({}) does not appear to match ICARTT output in {}'.format(history, filename)]
-        return errors
-

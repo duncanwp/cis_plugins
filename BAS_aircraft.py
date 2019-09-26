@@ -1,11 +1,11 @@
 """
-A plugin for reading converted ICARTT files
+A plugin for reading BAS aircraft files
 """
 from cis.data_io.products import AProduct
 import logging
 
 
-class icartt_netcdf(AProduct):
+class BAS_aircraft(AProduct):
 
     def get_file_signature(self):
         return [r'.*\.nc']
@@ -20,18 +20,17 @@ class icartt_netcdf(AProduct):
         # all the files are the same
         file_variables = get_netcdf_file_variables(filenames[0])
 
-        def get_axis_std_name(var):
+        def get_axis_std_name(lvar):
             axis=None
-            lvar = var.lower()
-            if lvar == 'longitude':
+            if lvar == 'LON_JAVAD' or lvar == 'LON_OXTS':
                 axis = 'x', 'longitude'
-            if lvar == 'latitude':
+            if lvar == 'LAT_JAVAD' or lvar == 'LAT_OXTS':
                 axis = 'y', 'latitude'
-            if lvar == 'G_ALT' or lvar == 'altitude' or lvar == 'pressure_altitude':
+            if lvar == 'ALT_JAVAD' or lvar == 'ALT_OXTS':
                 axis = 'z', 'altitude'
-            if lvar == 'time':
+            if lvar == 'Time':
                 axis = 't', 'time'
-            if lvar == 'p' or lvar == 'pressure' or lvar == 'static_pressure':
+            if lvar == 'PS_AIR':
                 axis = 'p', 'air_pressure'
             return axis
 
@@ -85,11 +84,11 @@ class icartt_netcdf(AProduct):
         atts = get_netcdf_file_attributes(filename)
         errors = None
         try:
-            history = atts['history']
+            title = atts['title']
         except KeyError as ex:
-            errors = ['No history attribute found in {}'.format(filename)]
+            errors = ['No title attribute found in {}'.format(filename)]
         else:
-            if "Assembled using assemble and _readict" not in history:
-                errors = ['History ({}) does not appear to match ICARTT output in {}'.format(history, filename)]
+            if not title.startswith("CARIBIC"):
+                errors = ['Title ({}) does not appear to match CARIBIC in {}'.format(title, filename)]
         return errors
 

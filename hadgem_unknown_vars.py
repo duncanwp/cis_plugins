@@ -1,5 +1,6 @@
 __author__ = 'watson-parris'
 from cis.data_io.products.HadGEM import HadGEM_PP
+import logging
 
 
 class HadGEM_unknown_vars(HadGEM_PP):
@@ -35,3 +36,27 @@ class HadGEM_unknown_vars(HadGEM_PP):
                 variables.append(name)
 
         return set(variables)
+
+    @staticmethod
+    def load_multiple_files_callback(cube, field, filename):
+        # This method sets the var_name (used for outputting the cube to NetCDF) to the cube name. This can be quite
+        #  for some HadGEM variables but most commands allow the user to override this field on output.
+        var_name = cube.name()
+        if var_name == 'unknown' and 'STASH' in cube.attributes:
+            var_name = '{}'.format(cube.attributes['STASH'])
+        try:
+            cube.var_name = var_name
+        except ValueError as e:
+            logging.info("Unable to set var_name due to error: {}".format(e))
+
+    @staticmethod
+    def load_single_file_callback(cube, field, filename):
+        # This method sets the var_name (used for outputting the cube to NetCDF) to the cube name. This can be quite
+        #  for some HadGEM variables but most commands allow the user to override this field on output.
+        var_name = cube.name()
+        if var_name == 'unknown' and 'STASH' in cube.attributes:
+            var_name = '{}'.format(cube.attributes['STASH'])
+        try:
+            cube.var_name = var_name
+        except ValueError as e:
+            logging.info("Unable to set var_name due to error: {}".format(e))

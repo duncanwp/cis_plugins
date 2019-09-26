@@ -101,24 +101,37 @@ class ECHAM_HAM_63(ECHAM_HAM_Pascals):
 
             if cube.coords('surface pressure'):
                 surface_pressure = cube.coord('surface pressure')
+            elif cube.coords('surface_air_pressure'):
+                surface_pressure = cube.coord('surface_air_pressure')
             else:
                 try:
-                    # If there isn't a surface pressure coordinate we can try and pull out the lowest pressure level
-                    surface_pressure_cubes = _get_cubes(filenames, 'atmospheric pressure at interfaces',
-                                                        callback=self.load_multiple_files_callback)
-                    if not surface_pressure_cubes:
-                        raise ValueError()
-                    surface_pressure_cube = surface_pressure_cubes.concatenate_cube()[:,-1,:,:]
-                    surface_pressure = AuxCoord(points=surface_pressure_cube.data, long_name='surface pressure', units='Pa')
+                    # If there isn't a surface pressure coordinate we can try loading it manually
+                    surface_pressure_cube = _get_cubes(filenames, 'surface_air_pressure',
+                                                       callback=self.load_multiple_files_callback).concatenate_cube()
+                    surface_pressure = AuxCoord(points=surface_pressure_cube.data,
+                                                standard_name='surface_air_pressure', long_name='surface pressure',
+                                                units='Pa')
                     cube.add_aux_coord(surface_pressure, (0, 2, 3))
                 except ValueError:
-                    # Try and get it from the vphysc stream
-                    v_files = ['_'.join(f.split('_')[:-1]) + '_vphysc.nc' for f in filenames]
-                    surface_pressure_cubes = _get_cubes(v_files, 'atmospheric pressure at interfaces',
-                                                        callback=self.load_multiple_files_callback)
-                    surface_pressure_cube = surface_pressure_cubes.concatenate_cube()[:,-1,:,:]
-                    surface_pressure = AuxCoord(points=surface_pressure_cube.data, long_name='surface pressure', units='Pa')
-                    cube.add_aux_coord(surface_pressure, (0, 2, 3))
+                    try:
+                        # If there isn't a surface pressure coordinate we can try and pull out the lowest pressure level
+                        surface_pressure_cubes = _get_cubes(filenames, 'atmospheric pressure at interfaces',
+                                                            callback=self.load_multiple_files_callback)
+                        surface_pressure_cube = surface_pressure_cubes.concatenate_cube()[:,-1,:,:]
+                        surface_pressure = AuxCoord(points=surface_pressure_cube.data, long_name='surface pressure', units='Pa')
+                        cube.add_aux_coord(surface_pressure, (0, 2, 3))
+                    except ValueError:
+                        # Try and get it from the vphysc stream
+                        v_files = ['_'.join(f.split('_')[:-1]) + '_vphysc.nc' for f in filenames]
+                        try:
+                            surface_pressure_cubes = _get_cubes(v_files, 'atmospheric pressure at interfaces',
+                                                                callback=self.load_multiple_files_callback)
+                        except:
+                            # If we can't do that then just exit - there must be a cleaner way to do this...
+                            return
+                        surface_pressure_cube = surface_pressure_cubes.concatenate_cube()[:,-1,:,:]
+                        surface_pressure = AuxCoord(points=surface_pressure_cube.data, long_name='surface pressure', units='Pa')
+                        cube.add_aux_coord(surface_pressure, (0, 2, 3))
 
             # First convert the hybrid coefficients to hPa, so that air pressure will be in hPa
             hybrid_a_coord.convert_units('hPa')

@@ -46,11 +46,12 @@ class GASSP(NCAR_NetCDF_RAF):
                 # Work out the associated variable name for this column
                 ccn_flag_var = "COL{}_FLAG".format(variable[-1])
                 # Read in the flags
-                flags = concatenate(read_many_files_individually(filenames, ccn_flag_var)[ccn_flag_var])
+                flags = concatenate([get_data(v) for v in read_many_files_individually(filenames, ccn_flag_var)[
+                    ccn_flag_var]])
                 # 0 and 1 are both OK
-                mask = flags[:] > 1
+                mask = flags > 1
                 # If a variable was supplied then coords must be an ungridded data object, apply the mask to it
-                var_data = apply_mask_to_numpy_array(concatenate(var_data), mask)
+                var_data = apply_mask_to_numpy_array(concatenate([get_data(v) for v in var_data]), mask)
 
             return UngriddedData(var_data, get_metadata(data_variables[variable][0]), all_coords)
 
@@ -63,7 +64,7 @@ class GASSP(NCAR_NetCDF_RAF):
         :param standard_name: the standard name it should have
         :return: a coords object
         """
-        from cis.data_io.netcdf import get_metadata, get_data
+        from cis.data_io.netcdf import get_metadata
         from cis.data_io.Coord import Coord
         from cf_units import Unit
         import logging
@@ -97,3 +98,22 @@ class GASSP(NCAR_NetCDF_RAF):
             coordinate_data_objects.append(Coord(data, m, coord_axis))
 
         return Coord.from_many_coordinates(coordinate_data_objects)
+
+
+def get_data(var):
+    # FIXME: THIS IS COPIED FROM CIS 1.6, and is a nasty hack needed because of crap data
+    from cis.data_io.netcdf import apply_offset_and_scaling, get_data
+    import numpy as np
+    import logging
+
+    var.set_auto_mask(False)
+
+    data = get_data(var)
+
+    # If the data isn't in the native endianess then flip it (in case it ends up in Pandas)
+    # See https://docs.scipy.org/doc/numpy-1.10.1/user/basics.byteswapping.html#data-and-dtype-endianness-match-swap-data-and-dtype
+    #  and https://stackoverflow.com/questions/30283836/creating-pandas-dataframe-from-numpy-array-leads-to-strange-errors
+    if data.dtype.byteorder != '=':
+        data = data.byteswap().newbyteorder()
+
+    return data
