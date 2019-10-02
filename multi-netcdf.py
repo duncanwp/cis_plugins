@@ -13,6 +13,8 @@ class multi_netcdf(NetCDF_Gridded):
     def load_multiple_files_callback(cube, field, filename):
         # We need to remove the history field when reading multiple files so that the cubes can be properly merged
         cube.attributes.pop('history', None)
+        cube.attributes.pop('date_time', None)
+        cube.attributes.pop('host_name', None)
         return cube
 
     def create_data_object(self, filenames, variable):

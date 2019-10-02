@@ -94,8 +94,10 @@ class ECHAM_HAM_63(ECHAM_HAM_Pascals):
             hybrid_a = _get_cubes(filenames, 'hybrid A coefficient at layer midpoints')
             hybrid_b = _get_cubes(filenames, 'hybrid B coefficient at layer midpoints')
 
-            hybrid_a_coord = AuxCoord(points=hybrid_a[0].data, long_name='hybrid A coefficient at layer midpoints', units='Pa')
-            hybrid_b_coord = AuxCoord(points=hybrid_b[0].data, long_name='hybrid B coefficient at layer midpoints', units='1')
+            hybrid_a_coord = AuxCoord(points=hybrid_a[0].data, 
+                    long_name='hybrid A coefficient at layer midpoints', units='Pa', var_name='hyam')
+            hybrid_b_coord = AuxCoord(points=hybrid_b[0].data, 
+                    long_name='hybrid B coefficient at layer midpoints', units='1', var_name='hybm')
 
             if cube.coords('surface pressure'):
                 surface_pressure = cube.coord('surface pressure')
