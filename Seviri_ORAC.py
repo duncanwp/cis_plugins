@@ -17,7 +17,7 @@ class seviri_ORAC(AProduct):
         from cis.data_io.ungridded_data import UngriddedCoordinates, UngriddedData
         from cis.exceptions import InvalidVariableError
 
-        variables = [("lon", "x"), ("lat", "y")]
+        variables = [("longitude", "x"), ("latitude", "y")]
 
         # if usr_variable is not None:
         #     variables.append((usr_variable, ''))
@@ -113,4 +113,3 @@ class seviri_ORAC_gridded(NetCDF_Gridded):
             if not source.startswith('ESA Cloud CCI Retrieval Products'):
                 errors = ['Source ({}) does not match SEVIRI in {}'.format(source, filename)]
         return errors
-
