@@ -122,7 +122,7 @@ class ECHAM_HAM_63(ECHAM_HAM_Pascals):
                         cube.add_aux_coord(surface_pressure, (0, 2, 3))
                     except ValueError:
                         # Try and get it from the vphysc stream
-                        v_files = ['_'.join(f.split('_')[:-1]) + '_vphysc.nc' for f in filenames]
+                        v_files = ['_'.join(f.split('_')[:-1]) + '_vphyscm.nc' for f in filenames]
                         try:
                             surface_pressure_cubes = _get_cubes(v_files, 'atmospheric pressure at interfaces',
                                                                 callback=self.load_multiple_files_callback)

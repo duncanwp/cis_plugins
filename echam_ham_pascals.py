@@ -61,6 +61,7 @@ class ECHAM_HAM_Pascals(NetCDF_Gridded):
         cube.attributes.pop('history', None)
         cube.attributes.pop('host_name', None)
         cube.attributes.pop('date_time', None)
+        cube.attributes.pop('title', None)
         return cube
 
     def get_variable_names(self, filenames, data_type=None):
