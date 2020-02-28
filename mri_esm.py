@@ -61,18 +61,22 @@ class MRI_ESM(NetCDF_Gridded):
         ps_filenames = [f.replace('concbc', 'ps_TL95L80_192x48NH_3hr') for f in filenames]
 
         # These will be the same for all files
-        hybrid_a = read(ps_filenames[0], 'a')
-        hybrid_b = read(ps_filenames[0], 'b')
+        hybrid_a = read(ps_filenames[0], 'a')['a']
+        hybrid_b = read(ps_filenames[0], 'b')['b']
 
         hybrid_a_coord = AuxCoord(points=hybrid_a[:], long_name='vertical coordinate formula term: a(k)', units='Pa')
         hybrid_b_coord = AuxCoord(points=hybrid_b[:], long_name='vertical coordinate formula term: b(k)', units='1')
 
         # This needs to be from each file and then merged
-        surface_pressure_cube = _get_cubes(ps_filenames, 'surface_air_pressure',
+        surface_pressure_cube = _get_cubes(ps_filenames, 'ps',
                                            callback=self.load_multiple_files_callback).concatenate_cube()
         surface_pressure = AuxCoord(points=surface_pressure_cube.data,
                                     standard_name='surface_air_pressure', long_name='surface pressure',
                                     units='Pa')
+         # First convert the hybrid coefficients to hPa, so that air pressure will be in hPa
+        hybrid_a_coord.convert_units('hPa')
+        surface_pressure.convert_units('hPa')
+
         cube.add_aux_coord(surface_pressure, (0, 2, 3))
 
         cube.add_aux_coord(hybrid_a_coord, (1,))

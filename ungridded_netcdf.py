@@ -57,6 +57,8 @@ class ungridded_netcdf(AProduct):
                     meta.standard_name = axis_std_name[1]
                 coord = Coord(var_data[name], meta, axis=axis_std_name[0])
                 if meta.standard_name == 'time':
+                    # Remove the mask from the time coordinate since this screws up date conversion...
+                    coord.data = coord.data.data
                     # Converting units to CIS std time
                     coord.convert_to_std_time()
                 coords.append(coord)
