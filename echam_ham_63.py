@@ -7,9 +7,6 @@ from cis.utils import demote_warnings
 def _get_cubes(filenames, constraints=None, callback=None):
     import iris
 
-    # Removes warnings and prepares for future Iris change
-    iris.FUTURE.netcdf_promote = True
-
     filenames_key = tuple(filenames)
     if filenames_key in gd.CACHED_CUBES:
         all_cubes = gd.CACHED_CUBES[filenames_key]
