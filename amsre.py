@@ -23,9 +23,9 @@ class AMSRE(AProduct):
         def get_axis_std_name(var):
             axis=None
             lvar = var.lower()
-            if lvar.startswith('lon'):
+            if usr_variable.split("_")[0] + '_longitude' in lvar:
                 axis = 'x', 'longitude'
-            if lvar.startswith('lat'):
+            if usr_variable.split("_")[0] + '_latitude' in lvar:
                 axis = 'y', 'latitude'
             if lvar == 'G_ALT' or lvar == 'altitude' or lvar == 'pressure_altitude':
                 axis = 'z', 'altitude'
@@ -68,7 +68,7 @@ class AMSRE(AProduct):
         if usr_variable is None:
             res = UngriddedCoordinates(coords)
         else:
-            res = UngriddedData(var_data[usr_variable][0][0, ...], get_metadata(var_data[usr_variable][0]), coords)
+            res = UngriddedData(var_data[usr_variable][0], get_metadata(var_data[usr_variable][0]), coords)
 
         return res
 

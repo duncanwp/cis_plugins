@@ -91,6 +91,10 @@ class ECHAM_HAM_63(ECHAM_HAM_Pascals):
             hybrid_a = _get_cubes(filenames, 'hybrid A coefficient at layer midpoints')
             hybrid_b = _get_cubes(filenames, 'hybrid B coefficient at layer midpoints')
 
+            if not hybrid_a:
+                # This might be an afterburned cube, eitherway we can't do anything with it
+                return
+
             hybrid_a_coord = AuxCoord(points=hybrid_a[0].data, 
                     long_name='hybrid A coefficient at layer midpoints', units='Pa', var_name='hyam')
             hybrid_b_coord = AuxCoord(points=hybrid_b[0].data, 
